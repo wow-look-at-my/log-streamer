@@ -15,6 +15,8 @@ var upgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool { return true },
 }
 
+const idleTimeout = 120 * time.Second
+
 func (s *Server) handleStream(w http.ResponseWriter, r *http.Request) {
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
@@ -38,7 +40,11 @@ func (s *Server) handleStream(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var linesReceived int
-	conn.SetReadDeadline(time.Now().Add(30 * time.Second))
+	conn.SetReadDeadline(time.Now().Add(idleTimeout))
+	conn.SetPingHandler(func(appData string) error {
+		conn.SetReadDeadline(time.Now().Add(idleTimeout))
+		return conn.WriteControl(websocket.PongMessage, []byte(appData), time.Now().Add(5*time.Second))
+	})
 
 	for {
 		_, msg, err := conn.ReadMessage()
@@ -53,7 +59,7 @@ func (s *Server) handleStream(w http.ResponseWriter, r *http.Request) {
 			break
 		}
 
-		conn.SetReadDeadline(time.Now().Add(30 * time.Second))
+		conn.SetReadDeadline(time.Now().Add(idleTimeout))
 
 		var sm protocol.StreamMessage
 		if err := json.Unmarshal(msg, &sm); err != nil {

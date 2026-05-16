@@ -202,6 +202,39 @@ func TestStreamInvalidJSON(t *testing.T) {
 	require.Equal(t, 1, fetchResp.Count)
 }
 
+func TestStreamWithPing(t *testing.T) {
+	srv := testServer(t)
+	ts := httptest.NewServer(srv.mux)
+	defer ts.Close()
+
+	wsURL := "ws" + ts.URL[4:] + "/api/stream"
+	conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
+	require.Nil(t, err)
+
+	var hello protocol.ServerHello
+	require.NoError(t, conn.ReadJSON(&hello))
+
+	require.NoError(t, conn.WriteControl(websocket.PingMessage, []byte("keepalive"), time.Now().Add(time.Second)))
+
+	msg := protocol.StreamMessage{Timestamp: time.Now().UTC(), Line: "after ping", Stream: "stdout"}
+	data, _ := json.Marshal(msg)
+	conn.WriteMessage(websocket.TextMessage, data)
+
+	conn.WriteMessage(websocket.CloseMessage,
+		websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
+	time.Sleep(50 * time.Millisecond)
+	conn.Close()
+
+	resp, err := http.Get(ts.URL + "/api/logs/" + hello.Token)
+	require.Nil(t, err)
+	defer resp.Body.Close()
+
+	var fetchResp protocol.FetchResponse
+	json.NewDecoder(resp.Body).Decode(&fetchResp)
+	require.Equal(t, 1, fetchResp.Count)
+	require.Equal(t, "after ping", fetchResp.Lines[0].Line)
+}
+
 func TestStreamMultipleLines(t *testing.T) {
 	srv := testServer(t)
 	ts := httptest.NewServer(srv.mux)

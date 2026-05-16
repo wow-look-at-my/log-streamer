@@ -35,6 +35,10 @@ func runSend(cmd *cobra.Command, args []string) error {
 	}
 	fmt.Fprintf(os.Stderr, "log-streamer token: %s\n", hello.Token)
 
+	pingDone := make(chan struct{})
+	startPinger(conn, pingDone)
+	defer close(pingDone)
+
 	scanner := bufio.NewScanner(os.Stdin)
 	for scanner.Scan() {
 		line := scanner.Text()

@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
+	"github.com/gorilla/websocket"
 	"github.com/spf13/cobra"
 )
 
@@ -41,4 +43,19 @@ func getHTTPURL() string {
 	ws = strings.Replace(ws, "wss://", "https://", 1)
 	ws = strings.Replace(ws, "ws://", "http://", 1)
 	return ws
+}
+
+func startPinger(conn *websocket.Conn, done <-chan struct{}) {
+	ticker := time.NewTicker(30 * time.Second)
+	go func() {
+		defer ticker.Stop()
+		for {
+			select {
+			case <-done:
+				return
+			case <-ticker.C:
+				conn.WriteControl(websocket.PingMessage, nil, time.Now().Add(5*time.Second))
+			}
+		}
+	}()
 }
