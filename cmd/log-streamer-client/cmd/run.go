@@ -38,6 +38,10 @@ func runRun(cmd *cobra.Command, args []string) error {
 	}
 	fmt.Fprintf(os.Stderr, "log-streamer token: %s\n", hello.Token)
 
+	pingDone := make(chan struct{})
+	startPinger(conn, pingDone)
+	defer close(pingDone)
+
 	child := exec.Command(args[0], args[1:]...)
 	child.Stdin = os.Stdin
 
