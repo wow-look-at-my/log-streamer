@@ -1,13 +1,14 @@
 package server
 
 import (
-	"encoding/json"
+	"errors"
 	"log"
 	"net/http"
 	"time"
 
 	"github.com/gorilla/websocket"
 	"github.com/wow-look-at-my/log-streamer/internal/protocol"
+	"github.com/wow-look-at-my/log-streamer/internal/storage"
 	"github.com/wow-look-at-my/log-streamer/internal/token"
 )
 
@@ -15,7 +16,14 @@ var upgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool { return true },
 }
 
-const idleTimeout = 120 * time.Second
+const (
+	idleTimeout = 120 * time.Second
+
+	// maxFrameBytes bounds a single inbound WebSocket message, preventing a
+	// client from forcing the server to buffer an unbounded frame in memory.
+	// Clients chunk payloads well under this.
+	maxFrameBytes = 1 << 20 // 1 MiB
+)
 
 func (s *Server) handleStream(w http.ResponseWriter, r *http.Request) {
 	conn, err := upgrader.Upgrade(w, r, nil)
@@ -24,6 +32,7 @@ func (s *Server) handleStream(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer conn.Close()
+	conn.SetReadLimit(maxFrameBytes)
 
 	tok, err := token.Generate()
 	if err != nil {
@@ -33,13 +42,21 @@ func (s *Server) handleStream(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	hello := protocol.ServerHello{Token: tok}
-	if err := conn.WriteJSON(hello); err != nil {
+	if err := conn.WriteJSON(protocol.ServerHello{Token: tok}); err != nil {
 		log.Printf("write hello: %v", err)
 		return
 	}
 
-	var linesReceived int
+	writer, err := s.store.OpenWriter(tok)
+	if err != nil {
+		log.Printf("open writer: %v", err)
+		conn.WriteMessage(websocket.CloseMessage,
+			websocket.FormatCloseMessage(websocket.CloseInternalServerErr, "storage error"))
+		return
+	}
+	defer writer.Close()
+
+	var bytesReceived int64
 	conn.SetReadDeadline(time.Now().Add(idleTimeout))
 	conn.SetPingHandler(func(appData string) error {
 		conn.SetReadDeadline(time.Now().Add(idleTimeout))
@@ -47,7 +64,7 @@ func (s *Server) handleStream(w http.ResponseWriter, r *http.Request) {
 	})
 
 	for {
-		_, msg, err := conn.ReadMessage()
+		mt, msg, err := conn.ReadMessage()
 		if err != nil {
 			if websocket.IsCloseError(err, websocket.CloseNormalClosure, websocket.CloseGoingAway) {
 				break
@@ -61,20 +78,26 @@ func (s *Server) handleStream(w http.ResponseWriter, r *http.Request) {
 
 		conn.SetReadDeadline(time.Now().Add(idleTimeout))
 
-		var sm protocol.StreamMessage
-		if err := json.Unmarshal(msg, &sm); err != nil {
+		// Log data arrives as binary frames; ignore anything else (a misbehaving
+		// or probing client sending text/JSON).
+		if mt != websocket.BinaryMessage || len(msg) < protocol.FrameHeaderSize {
 			continue
 		}
 
-		if err := s.store.Append(tok, sm); err != nil {
+		if err := writer.Append(msg); err != nil {
+			if errors.Is(err, storage.ErrStreamFull) || errors.Is(err, storage.ErrDiskFull) {
+				conn.WriteJSON(protocol.ErrorResponse{Error: err.Error()})
+				conn.WriteMessage(websocket.CloseMessage,
+					websocket.FormatCloseMessage(websocket.ClosePolicyViolation, err.Error()))
+				break
+			}
 			log.Printf("store append: %v", err)
 			continue
 		}
-		linesReceived++
+		bytesReceived += int64(len(msg))
 	}
 
-	ack := protocol.ServerAck{LinesReceived: linesReceived}
-	conn.WriteJSON(ack)
+	conn.WriteJSON(protocol.ServerAck{BytesReceived: bytesReceived})
 
-	log.Printf("stream %s: %d lines", tok[:12], linesReceived)
+	log.Printf("stream %s: %d bytes", tok[:12], bytesReceived)
 }

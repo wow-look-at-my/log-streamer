@@ -1,0 +1,7 @@
+.git
+.github
+build/
+data/
+/log-streamer-client
+/log-streamer-server
+*.md

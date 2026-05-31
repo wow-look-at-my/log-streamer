@@ -2,6 +2,7 @@ package server
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"os"
 
@@ -15,13 +16,13 @@ func (s *Server) handleFetch(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, protocol.ErrorResponse{Error: "invalid token format"})
 		return
 	}
-	if !s.store.Exists(tok) {
-		writeJSON(w, http.StatusNotFound, protocol.ErrorResponse{Error: "token not found"})
-		return
-	}
 
 	lines, err := s.store.Fetch(tok)
 	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			writeJSON(w, http.StatusNotFound, protocol.ErrorResponse{Error: "token not found"})
+			return
+		}
 		writeJSON(w, http.StatusInternalServerError, protocol.ErrorResponse{Error: "failed to read logs"})
 		return
 	}
@@ -40,9 +41,8 @@ func (s *Server) handleDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err := s.store.Delete(tok)
-	if err != nil {
-		if os.IsNotExist(err) {
+	if err := s.store.Delete(tok); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
 			writeJSON(w, http.StatusNotFound, protocol.ErrorResponse{Error: "token not found"})
 			return
 		}
@@ -56,5 +56,5 @@ func (s *Server) handleDelete(w http.ResponseWriter, r *http.Request) {
 func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(v)
+	_ = json.NewEncoder(w).Encode(v)
 }
