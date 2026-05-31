@@ -110,6 +110,21 @@ func TestClientRun(t *testing.T) {
 	require.NoError(t, runRun(runCmd, []string{"sh", "-c", "echo out; echo err 1>&2"}))
 }
 
+func TestClientRunViaCLIWithChildFlags(t *testing.T) {
+	ts := startClientTestServer(t)
+	captureStdout(t)
+
+	// Drive the real cobra path: the child's `-c` flag must reach sh, not be
+	// parsed as a flag of log-streamer-client.
+	host := strings.TrimPrefix(ts.URL, "http://")
+	origURL := serverURL
+	rootCmd.SetArgs([]string{"--server", "ws://" + host, "run", "sh", "-c", "echo viaCLI"})
+	err := rootCmd.Execute()
+	rootCmd.SetArgs(nil)
+	serverURL = origURL
+	require.NoError(t, err)
+}
+
 func TestClientRunConnectError(t *testing.T) {
 	orig := serverURL
 	serverURL = "ws://127.0.0.1:1" // nothing listening
