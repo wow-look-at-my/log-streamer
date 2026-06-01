@@ -1,13 +1,10 @@
 package cmd
 
 import (
-	"bufio"
-	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
 	"sync"
-	"time"
 
 	"github.com/gorilla/websocket"
 	"github.com/spf13/cobra"
@@ -22,6 +19,10 @@ var runCmd = &cobra.Command{
 }
 
 func init() {
+	// Everything after the command name belongs to the child process, so stop
+	// parsing our own flags at the first positional arg. Without this, a child
+	// flag like `run make -j4` is misread as a flag of log-streamer-client.
+	runCmd.Flags().SetInterspersed(false)
 	rootCmd.AddCommand(runCmd)
 }
 
@@ -58,40 +59,17 @@ func runRun(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	var mu sync.Mutex
-	send := func(line, stream string) {
-		msg := protocol.StreamMessage{
-			Timestamp: time.Now().UTC(),
-			Line:      line,
-			Stream:    stream,
-		}
-		data, _ := json.Marshal(msg)
-		mu.Lock()
-		conn.WriteMessage(websocket.TextMessage, data)
-		mu.Unlock()
-	}
+	sender := &wsSender{conn: conn}
 
 	var wg sync.WaitGroup
 	wg.Add(2)
-
 	go func() {
 		defer wg.Done()
-		scanner := bufio.NewScanner(stdoutPipe)
-		for scanner.Scan() {
-			line := scanner.Text()
-			fmt.Println(line)
-			send(line, "stdout")
-		}
+		_ = pump(stdoutPipe, protocol.StreamStdout, os.Stdout, sender.sendFrame)
 	}()
-
 	go func() {
 		defer wg.Done()
-		scanner := bufio.NewScanner(stderrPipe)
-		for scanner.Scan() {
-			line := scanner.Text()
-			fmt.Fprintln(os.Stderr, line)
-			send(line, "stderr")
-		}
+		_ = pump(stderrPipe, protocol.StreamStderr, os.Stderr, sender.sendFrame)
 	}()
 
 	wg.Wait()

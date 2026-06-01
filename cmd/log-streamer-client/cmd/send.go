@@ -1,11 +1,8 @@
 package cmd
 
 import (
-	"bufio"
-	"encoding/json"
 	"fmt"
 	"os"
-	"time"
 
 	"github.com/gorilla/websocket"
 	"github.com/spf13/cobra"
@@ -39,23 +36,11 @@ func runSend(cmd *cobra.Command, args []string) error {
 	startPinger(conn, pingDone)
 	defer close(pingDone)
 
-	scanner := bufio.NewScanner(os.Stdin)
-	for scanner.Scan() {
-		line := scanner.Text()
-		fmt.Println(line)
-		msg := protocol.StreamMessage{
-			Timestamp: time.Now().UTC(),
-			Line:      line,
-			Stream:    "stdin",
-		}
-		data, _ := json.Marshal(msg)
-		if err := conn.WriteMessage(websocket.TextMessage, data); err != nil {
-			return fmt.Errorf("sending: %w", err)
-		}
-	}
+	sender := &wsSender{conn: conn}
+	pumpErr := pump(os.Stdin, protocol.StreamStdin, os.Stdout, sender.sendFrame)
 
 	conn.WriteMessage(websocket.CloseMessage,
 		websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
 
-	return scanner.Err()
+	return pumpErr
 }
