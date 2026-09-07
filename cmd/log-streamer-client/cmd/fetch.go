@@ -89,7 +89,8 @@ func followStream(ctx context.Context, out *bufio.Writer, tok string, sanitize b
 		case err != nil:
 			return err
 		case resp.Count < cursor:
-			// Shorter than the cursor means restarted, so re-read from the top.
+			// A log shorter than the cursor was restarted, so re-read it. A
+			// restart back to the same length or longer reads as growth.
 			cursor = 0
 			continue
 		default:
@@ -108,7 +109,8 @@ func followStream(ctx context.Context, out *bufio.Writer, tok string, sanitize b
 	}
 }
 
-// fetchSince reads the log from a line offset, plus the total count.
+// fetchSince reads the log from a line offset. The response carries the total
+// count, so a caller can tell whether it has fallen behind or ahead.
 func fetchSince(tok string, since int) (protocol.FetchResponse, error) {
 	var out protocol.FetchResponse
 
