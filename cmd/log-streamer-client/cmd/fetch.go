@@ -89,7 +89,8 @@ func followStream(ctx context.Context, out *bufio.Writer, tok string, sanitize b
 		case err != nil:
 			return err
 		case resp.Count < cursor:
-			// The log shrank, so it was deleted and restarted. Re-read it.
+			// A log shorter than the cursor was restarted, so re-read it. A
+			// restart back to the same length or longer reads as growth.
 			cursor = 0
 			continue
 		default:

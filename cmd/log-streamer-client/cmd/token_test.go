@@ -74,7 +74,7 @@ func TestTokenDeriveMatchesTheLibrary(t *testing.T) {
 
 	require.NoError(t, runTokenDerive(tokenDeriveCmd, nil))
 
-	// The context the command builds must be the one a reader reproduces.
+	// The context the command builds must match what a reader reproduces.
 	want, err := token.Derive("shared-key", "wow-look-at-my/log-streamer/42/1/test")
 	require.NoError(t, err)
 	require.Equal(t, want, mustDerive(t))

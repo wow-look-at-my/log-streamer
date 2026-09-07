@@ -17,12 +17,10 @@ import (
 	"github.com/wow-look-at-my/log-streamer/internal/protocol"
 )
 
-// followBudget bounds every wait here. A follow tick is milliseconds, so
-// reaching this means the follow stalled.
+// followBudget bounds every wait here; reaching it means the follow stalled.
 const followBudget = 2 * time.Second
 
-// syncBuffer collects followed output, which the follow goroutine writes and
-// the test goroutine reads.
+// syncBuffer carries followed output between the follow and test goroutines.
 type syncBuffer struct {
 	mu  sync.Mutex
 	buf bytes.Buffer
@@ -104,8 +102,7 @@ func (l *lineServer) start(t *testing.T) *httptest.Server {
 func followUntil(t *testing.T, step func(printed string) bool) string {
 	t.Helper()
 	var buf syncBuffer
-	// Only the follow goroutine touches the bufio.Writer; the test reads the
-	// synchronized buffer under it.
+	// Only the follow goroutine touches the bufio.Writer.
 	out := bufio.NewWriter(&buf)
 
 	ctx, cancel := context.WithTimeout(context.Background(), followBudget)
@@ -137,8 +134,7 @@ func TestFollowPrintsLinesAsTheyArrive(t *testing.T) {
 		if !strings.Contains(printed, "early build output") {
 			return false
 		}
-		// Append only after the earlier line printed, so this proves the follow
-		// keeps reading rather than dumping the log and stopping.
+		// Append only after the earlier line printed, proving it kept reading.
 		if !queued {
 			srv.append("printed later")
 			queued = true
@@ -158,8 +154,7 @@ func TestFollowWaitsForAStreamThatDoesNotExistYet(t *testing.T) {
 	pointClientAt(t, srv.start(t))
 	setFollowInterval(t, 5*time.Millisecond)
 
-	// A watcher computes the token before the job reaches the streaming step,
-	// so an absent log must not end the follow.
+	// A watcher knows the token before the job streams, so an absent log waits.
 	started := false
 	got := followUntil(t, func(printed string) bool {
 		if !started {
@@ -178,15 +173,17 @@ func TestFollowRewindsWhenTheLogShrinks(t *testing.T) {
 	pointClientAt(t, srv.start(t))
 	setFollowInterval(t, 5*time.Millisecond)
 
-	srv.append("from the earlier attempt")
+	srv.append("earlier attempt line a")
+	srv.append("earlier attempt line b")
+	srv.append("earlier attempt line c")
+
 	rewound := false
 	got := followUntil(t, func(printed string) bool {
 		if !rewound {
-			if !strings.Contains(printed, "from the earlier attempt") {
+			if !strings.Contains(printed, "earlier attempt line c") {
 				return false
 			}
-			// Deleted and restarted shorter: the cursor sits past the end and
-			// must rewind instead of stalling.
+			// Deleted and restarted shorter, leaving the cursor past the end.
 			srv.restartWith("from the retry")
 			rewound = true
 			return false
