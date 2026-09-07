@@ -10,7 +10,7 @@ import (
 
 	"github.com/gorilla/websocket"
 	"github.com/wow-look-at-my/log-streamer/internal/protocol"
-	"github.com/wow-look-at-my/testify/require"
+	"github.com/stretchr/testify/require"
 )
 
 func testServer(t *testing.T, cfg Config) *Server {

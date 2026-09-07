@@ -11,7 +11,7 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/wow-look-at-my/log-streamer/internal/protocol"
 	"github.com/wow-look-at-my/log-streamer/internal/server"
-	"github.com/wow-look-at-my/testify/require"
+	"github.com/stretchr/testify/require"
 )
 
 func startClientTestServer(t *testing.T) *httptest.Server {

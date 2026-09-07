@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/wow-look-at-my/log-streamer/internal/protocol"
-	"github.com/wow-look-at-my/testify/require"
+	"github.com/stretchr/testify/require"
 )
 
 const testToken = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
