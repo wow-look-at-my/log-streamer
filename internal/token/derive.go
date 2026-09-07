@@ -8,8 +8,7 @@ import (
 	"strings"
 )
 
-// ErrNoKey reports a keyless derivation, whose token the public run metadata
-// would give away.
+// ErrNoKey reports a keyless derivation, which public metadata gives away.
 var ErrNoKey = errors.New("no derivation key")
 
 // ErrNoContext reports a derivation with nothing to name the stream.
