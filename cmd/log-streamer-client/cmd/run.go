@@ -19,8 +19,7 @@ var runCmd = &cobra.Command{
 }
 
 func init() {
-	// Stop own-flag parsing at the child's positional arg, so a child flag
-	// like `run make -j4` is not misread as ours.
+	// Stop own-flag parsing at the child's arg, so `run make -j4` isn't misread.
 	runCmd.Flags().SetInterspersed(false)
 	rootCmd.AddCommand(runCmd)
 }

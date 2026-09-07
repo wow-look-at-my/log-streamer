@@ -73,8 +73,7 @@ func TestArbitrarilyLongLine(t *testing.T) {
 	store, err := New(Options{Dir: t.TempDir()})
 	require.NoError(t, err)
 
-	// A mebibyte of content with no newline until the end, round-tripping as
-	// a single line.
+	// A mebibyte with no newline until the end, round-tripping as one line.
 	const total = 1 << 20
 	big := strings.Repeat("x", total)
 	w, err := store.OpenWriter(testToken)
@@ -136,8 +135,7 @@ func TestBinaryPayloadPreserved(t *testing.T) {
 	store, err := New(Options{Dir: t.TempDir()})
 	require.NoError(t, err)
 
-	// NUL, an invalid byte, and an ESC survive verbatim through the binary
-	// format; JSON-string storage would mangle them.
+	// NUL, an invalid byte, and an ESC survive verbatim in the binary format.
 	raw := string([]byte{0x00, 0xff, 0x1b, '[', '0', 'm', '\n'})
 	writeFrames(t, store, testToken, frame(protocol.StreamStdout, raw))
 

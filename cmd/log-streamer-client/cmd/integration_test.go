@@ -15,9 +15,7 @@ import (
 	"github.com/wow-look-at-my/log-streamer/internal/server"
 )
 
-// globalStateMu serializes tests that mutate this package's shared mutable
-// state (serverURL, os.Stdout), so a test never observes another test's
-// in-progress change.
+// globalStateMu serializes tests mutating shared package state (serverURL, os.Stdout).
 var globalStateMu sync.Mutex
 
 func lockGlobalState(t *testing.T) {

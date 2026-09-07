@@ -9,8 +9,7 @@ import (
 	"github.com/wow-look-at-my/log-streamer/internal/protocol"
 )
 
-// chunkSize bounds bytes read and sent per frame; memory stays O(chunkSize)
-// regardless of a log line's length.
+// chunkSize bounds bytes read and sent per frame.
 const chunkSize = 32 * 1024
 
 // wsSender serializes binary frame writes to a shared connection; control

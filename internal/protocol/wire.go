@@ -7,8 +7,7 @@ import (
 	"time"
 )
 
-// StreamID identifies which output stream a frame belongs to; encoded as a
-// byte on the wire and on disk.
+// StreamID identifies which output stream a frame belongs to.
 type StreamID byte
 
 const (
@@ -30,8 +29,7 @@ func (s StreamID) String() string {
 	}
 }
 
-// FrameHeaderSize is the wire frame prefix: a stream id byte followed by a
-// big-endian Unix-nanosecond timestamp. The raw payload fills the rest.
+// FrameHeaderSize is the wire frame prefix: a stream id plus a timestamp.
 const FrameHeaderSize = 1 + 8
 
 // ErrShortFrame is returned when a frame body is smaller than the header.

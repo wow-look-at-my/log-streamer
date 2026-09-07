@@ -55,8 +55,7 @@ func runFetch(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// Untrusted log content: escape control sequences on a terminal so a line
-	// can't drive it; piped output stays raw.
+	// Untrusted log content: escape control sequences on a terminal only.
 	sanitize := !fetchRaw && isTerminal(os.Stdout)
 
 	out := bufio.NewWriter(os.Stdout)

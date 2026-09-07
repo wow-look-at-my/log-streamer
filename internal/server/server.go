@@ -116,8 +116,7 @@ func (s *Server) Run() error {
 	srv := &http.Server{
 		Addr:    s.config.Addr,
 		Handler: s.mux,
-		// Bounds slow-header time so an idle client can't hang; no WriteTimeout,
-		// or a long-lived WebSocket stream would get killed.
+		// No WriteTimeout: it would kill a long-lived WebSocket stream.
 		ReadHeaderTimeout: 10 * time.Second,
 		IdleTimeout:       120 * time.Second,
 	}

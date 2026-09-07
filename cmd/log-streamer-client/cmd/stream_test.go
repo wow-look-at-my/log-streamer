@@ -31,8 +31,7 @@ func TestPumpSmallInput(t *testing.T) {
 }
 
 func TestPumpChunksLargeInput(t *testing.T) {
-	// Larger than chunkSize with no newline: must stream in full across
-	// bounded frames.
+	// Larger than chunkSize with no newline: must stream in bounded frames.
 	input := []byte(strings.Repeat("a", chunkSize*3+17))
 	var sent []byte
 	frames := 0
@@ -57,8 +56,7 @@ func TestSanitizeControl(t *testing.T) {
 	require.Equal(t, "bell^G", sanitizeControl("bell\x07"))
 	require.Equal(t, "del^?", sanitizeControl("del\x7f"))
 
-	// A C1 control (NEL) must be neutralized, not emitted verbatim; built via
-	// rune() to keep this source file pure ASCII.
+	// A C1 control (NEL) must be neutralized, not emitted verbatim.
 	nel := string(rune(0x85))
 	got := sanitizeControl("x" + nel + "y")
 	require.NotContains(t, got, nel)

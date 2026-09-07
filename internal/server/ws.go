@@ -19,8 +19,7 @@ var upgrader = websocket.Upgrader{
 const (
 	idleTimeout = 120 * time.Second
 
-	// maxFrameBytes bounds an inbound message so a client cannot force the
-	// server to buffer an unbounded frame in memory.
+	// maxFrameBytes bounds an inbound message's in-memory buffer.
 	maxFrameBytes = 1 << 20
 )
 

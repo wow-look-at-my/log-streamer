@@ -31,8 +31,7 @@ const (
 	numShards = 256
 	fileExt   = ".bin"
 
-	// maxRecordBytes guards Fetch against a corrupt length prefix; legitimate
-	// frames, capped by the server's read limit, land far below it.
+	// maxRecordBytes guards Fetch against a corrupt length prefix.
 	maxRecordBytes = 8 << 20
 )
 
@@ -53,8 +52,7 @@ type Store struct {
 	// shards let concurrent tokens append and delete without locking the store.
 	shards [numShards]sync.Mutex
 
-	// totalBytes approximates on-disk usage; it errs high under a concurrent
-	// delete-while-write and resets on restart.
+	// totalBytes approximates on-disk usage and resets on restart.
 	totalBytes int64
 }
 
