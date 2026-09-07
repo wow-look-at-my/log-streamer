@@ -32,7 +32,7 @@ func (s *Server) handleStream(w http.ResponseWriter, r *http.Request) {
 	defer conn.Close()
 	conn.SetReadLimit(maxFrameBytes)
 
-	// A caller names its own stream, since a minted one escapes only by the log.
+	// A caller names its own stream, since a minted token escapes by the log.
 	tok := r.URL.Query().Get("token")
 	if tok != "" && !token.Validate(tok) {
 		conn.WriteMessage(websocket.CloseMessage,
