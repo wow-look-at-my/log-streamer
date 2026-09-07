@@ -35,7 +35,7 @@ func runSend(cmd *cobra.Command, args []string) error {
 	if err := conn.ReadJSON(&hello); err != nil {
 		return fmt.Errorf("reading token: %w", err)
 	}
-	fmt.Fprintf(os.Stderr, "log-streamer token: %s\n", hello.Token)
+	announceToken(hello.Token)
 
 	pingDone := make(chan struct{})
 	startPinger(conn, pingDone)

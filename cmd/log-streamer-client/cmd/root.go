@@ -41,6 +41,15 @@ func streamURL() (string, error) {
 	return base + "?token=" + url.QueryEscape(tok), nil
 }
 
+// announceToken reports a server-minted token, which the caller has no other
+// way to learn. A token the caller chose is already known, and echoing it would
+// only park a live credential in the log.
+func announceToken(tok string) {
+	if getStreamToken() == "" {
+		fmt.Fprintf(os.Stderr, "log-streamer token: %s\n", tok)
+	}
+}
+
 func getStreamToken() string {
 	if streamToken != "" {
 		return streamToken
