@@ -5,6 +5,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -13,6 +14,17 @@ import (
 	"github.com/wow-look-at-my/log-streamer/internal/protocol"
 	"github.com/wow-look-at-my/log-streamer/internal/server"
 )
+
+// globalStateMu serializes tests that mutate this package's shared mutable
+// state (serverURL, os.Stdout), so a test never observes another test's
+// in-progress change.
+var globalStateMu sync.Mutex
+
+func lockGlobalState(t *testing.T) {
+	t.Helper()
+	globalStateMu.Lock()
+	t.Cleanup(globalStateMu.Unlock)
+}
 
 func startClientTestServer(t *testing.T) *httptest.Server {
 	t.Helper()
@@ -63,6 +75,7 @@ func streamOneFrame(t *testing.T, ts *httptest.Server, payload string) string {
 }
 
 func TestClientFetchAndDelete(t *testing.T) {
+	lockGlobalState(t)
 	ts := startClientTestServer(t)
 	pointClientAt(t, ts)
 	captureStdout(t)
@@ -76,6 +89,7 @@ func TestClientFetchAndDelete(t *testing.T) {
 }
 
 func TestClientFetchInvalidToken(t *testing.T) {
+	lockGlobalState(t)
 	ts := startClientTestServer(t)
 	pointClientAt(t, ts)
 	captureStdout(t)
@@ -84,6 +98,7 @@ func TestClientFetchInvalidToken(t *testing.T) {
 }
 
 func TestClientSend(t *testing.T) {
+	lockGlobalState(t)
 	ts := startClientTestServer(t)
 	pointClientAt(t, ts)
 	captureStdout(t)
@@ -102,6 +117,7 @@ func TestClientSend(t *testing.T) {
 }
 
 func TestClientRun(t *testing.T) {
+	lockGlobalState(t)
 	ts := startClientTestServer(t)
 	pointClientAt(t, ts)
 	captureStdout(t)
@@ -111,6 +127,7 @@ func TestClientRun(t *testing.T) {
 }
 
 func TestClientRunViaCLIWithChildFlags(t *testing.T) {
+	lockGlobalState(t)
 	ts := startClientTestServer(t)
 	captureStdout(t)
 
@@ -125,6 +142,7 @@ func TestClientRunViaCLIWithChildFlags(t *testing.T) {
 }
 
 func TestClientRunConnectError(t *testing.T) {
+	lockGlobalState(t)
 	orig := serverURL
 	serverURL = "ws://127.0.0.1:1" // nothing listening
 	defer func() { serverURL = orig }()

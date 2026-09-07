@@ -66,6 +66,7 @@ func TestSanitizeControl(t *testing.T) {
 }
 
 func TestGetURLs(t *testing.T) {
+	lockGlobalState(t)
 	orig := serverURL
 	defer func() { serverURL = orig }()
 
