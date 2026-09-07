@@ -73,7 +73,7 @@ func TestArbitrarilyLongLine(t *testing.T) {
 	store, err := New(Options{Dir: t.TempDir()})
 	require.NoError(t, err)
 
-	// A mebibyte with no newline until the end, round-tripping as one line.
+	// A mebibyte with no newline until the end, round-tripping as a line.
 	const total = 1 << 20
 	big := strings.Repeat("x", total)
 	w, err := store.OpenWriter(testToken)
