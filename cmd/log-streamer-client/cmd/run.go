@@ -19,9 +19,8 @@ var runCmd = &cobra.Command{
 }
 
 func init() {
-	// Everything after the command name belongs to the child process, so stop
-	// parsing our own flags at the first positional arg. Without this, a child
-	// flag like `run make -j4` is misread as a flag of log-streamer-client.
+	// Stop own-flag parsing at the child's positional arg, so a child flag
+	// like `run make -j4` is not misread as ours.
 	runCmd.Flags().SetInterspersed(false)
 	rootCmd.AddCommand(runCmd)
 }

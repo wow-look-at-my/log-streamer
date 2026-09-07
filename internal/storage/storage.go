@@ -20,7 +20,7 @@ import (
 )
 
 // Sentinel errors returned by Writer.Append when a configured limit would be
-// exceeded. The caller should stop the stream when it sees one of these.
+// exceeded. The caller should stop the stream on any of these.
 var (
 	ErrStreamFull = errors.New("stream byte limit exceeded")
 	ErrDiskFull   = errors.New("total storage limit exceeded")
@@ -31,19 +31,17 @@ const (
 	numShards = 256
 	fileExt   = ".bin"
 
-	// maxRecordBytes bounds a single on-disk record when reading back. A frame
-	// arrives in one WebSocket message (capped by the server's read limit), so
-	// legitimate records stay well under this; the ceiling only guards Fetch
-	// against a corrupt length prefix.
-	maxRecordBytes = 8 << 20 // 8 MiB
+	// maxRecordBytes guards Fetch against a corrupt length prefix; legitimate
+	// frames, capped by the server's read limit, land far below it.
+	maxRecordBytes = 8 << 20
 )
 
 // Options configures a Store.
 type Options struct {
 	Dir            string
-	MaxStreamBytes int64         // per-stream cap in bytes; 0 = unlimited
-	MaxTotalBytes  int64         // total on-disk cap in bytes; 0 = unlimited
-	TTL            time.Duration // delete streams older than this; 0 = never
+	MaxStreamBytes int64         // per-stream cap in bytes; unset = unlimited
+	MaxTotalBytes  int64         // total on-disk cap in bytes; unset = unlimited
+	TTL            time.Duration // delete streams older than this; unset = never
 }
 
 type Store struct {
@@ -52,14 +50,11 @@ type Store struct {
 	maxTotalBytes  int64
 	ttl            time.Duration
 
-	// shards serialize append-vs-delete on the same token without serializing
-	// the whole server. A token maps to a shard by hash; distinct streams
-	// almost never contend.
+	// shards let concurrent tokens append and delete without locking the store.
 	shards [numShards]sync.Mutex
 
-	// totalBytes is an approximate running sum of on-disk file sizes used to
-	// enforce MaxTotalBytes. It is seeded from disk in New, errs high under
-	// concurrent delete-while-writing (conservative), and is reset on restart.
+	// totalBytes approximates on-disk usage; it errs high under a concurrent
+	// delete-while-write and resets on restart.
 	totalBytes int64
 }
 
@@ -109,7 +104,7 @@ func (s *Store) filePath(tok string) (string, error) {
 // TotalBytes returns the approximate total on-disk usage.
 func (s *Store) TotalBytes() int64 { return atomic.LoadInt64(&s.totalBytes) }
 
-// Writer holds an open append handle for one stream's lifetime so the server
+// Writer holds an open append handle for a stream's lifetime so the server
 // does not pay an open/close syscall per frame.
 type Writer struct {
 	store       *Store
@@ -131,9 +126,8 @@ func (s *Store) OpenWriter(tok string) (*Writer, error) {
 	return &Writer{store: s, tok: tok, f: f}, nil
 }
 
-// Append stores one frame body as a length-prefixed record:
-// [uvarint len(body)][body]. It enforces the per-stream and total-disk caps,
-// returning ErrStreamFull / ErrDiskFull when a limit would be exceeded.
+// Append stores a frame body as a length-prefixed record:
+// [uvarint len(body)][body], enforcing the per-stream and total-disk caps.
 func (w *Writer) Append(body []byte) error {
 	s := w.store
 
@@ -170,9 +164,9 @@ func (w *Writer) Append(body []byte) error {
 // Close releases the append handle.
 func (w *Writer) Close() error { return w.f.Close() }
 
-// Fetch reads a stream and reassembles its frames into whole lines. It splits
-// each stream's concatenated payload on '\n', giving every line the timestamp
-// of the frame that contained its first byte. It reads without a lock, so it
+// Fetch reads a stream and reassembles its frames into whole lines, splitting
+// each stream's concatenated payload on '\n' and stamping every line with the
+// timestamp of the frame that started it. It reads without a lock, so it
 // reflects data up to the current end of file and skips a torn final record.
 func (s *Store) Fetch(tok string) ([]protocol.StreamMessage, error) {
 	path, err := s.filePath(tok)
@@ -291,7 +285,7 @@ func (s *Store) Exists(tok string) bool {
 }
 
 // Sweep deletes streams whose file modification time is older than the TTL. It
-// is a no-op when TTL is 0. Returns the number of streams removed.
+// is a no-op when TTL is unset. Returns the count of streams removed.
 func (s *Store) Sweep(now time.Time) (int, error) {
 	if s.ttl <= 0 {
 		return 0, nil

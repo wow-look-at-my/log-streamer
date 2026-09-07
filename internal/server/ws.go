@@ -19,10 +19,9 @@ var upgrader = websocket.Upgrader{
 const (
 	idleTimeout = 120 * time.Second
 
-	// maxFrameBytes bounds a single inbound WebSocket message, preventing a
-	// client from forcing the server to buffer an unbounded frame in memory.
-	// Clients chunk payloads well under this.
-	maxFrameBytes = 1 << 20 // 1 MiB
+	// maxFrameBytes bounds an inbound message so a client cannot force the
+	// server to buffer an unbounded frame in memory.
+	maxFrameBytes = 1 << 20
 )
 
 func (s *Server) handleStream(w http.ResponseWriter, r *http.Request) {

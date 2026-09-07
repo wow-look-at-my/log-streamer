@@ -16,8 +16,8 @@ import (
 )
 
 const (
-	defaultMaxStreamBytes = 1 << 30 // 1 GiB
-	defaultMaxTotalBytes  = 0       // unlimited
+	defaultMaxStreamBytes = 1 << 30
+	defaultMaxTotalBytes  = 0 // unlimited
 	defaultTTL            = 7 * 24 * time.Hour
 	defaultSweepInterval  = 10 * time.Minute
 )
@@ -116,9 +116,8 @@ func (s *Server) Run() error {
 	srv := &http.Server{
 		Addr:    s.config.Addr,
 		Handler: s.mux,
-		// Bound the time a slow client may take to send request headers, so an
-		// idle/slowloris connection cannot tie up a connection indefinitely. No
-		// WriteTimeout: it would kill long-lived streaming WebSocket connections.
+		// Bounds slow-header time so an idle client can't hang; no WriteTimeout,
+		// or a long-lived WebSocket stream would get killed.
 		ReadHeaderTimeout: 10 * time.Second,
 		IdleTimeout:       120 * time.Second,
 	}

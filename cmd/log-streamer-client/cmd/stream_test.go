@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/wow-look-at-my/log-streamer/internal/protocol"
 	"github.com/stretchr/testify/require"
+	"github.com/wow-look-at-my/log-streamer/internal/protocol"
 )
 
 func TestPumpSmallInput(t *testing.T) {
@@ -31,8 +31,8 @@ func TestPumpSmallInput(t *testing.T) {
 }
 
 func TestPumpChunksLargeInput(t *testing.T) {
-	// Larger than chunkSize and with no newline at all: must still stream out
-	// in full, across multiple frames, with bounded per-frame size.
+	// Larger than chunkSize with no newline: must stream in full across
+	// bounded frames.
 	input := []byte(strings.Repeat("a", chunkSize*3+17))
 	var sent []byte
 	frames := 0
@@ -57,8 +57,8 @@ func TestSanitizeControl(t *testing.T) {
 	require.Equal(t, "bell^G", sanitizeControl("bell\x07"))
 	require.Equal(t, "del^?", sanitizeControl("del\x7f"))
 
-	// A C1 control (NEL, U+0085) must be neutralized (not emitted verbatim).
-	// Built via string(rune(...)) to keep this source file pure ASCII.
+	// A C1 control (NEL) must be neutralized, not emitted verbatim; built via
+	// rune() to keep this source file pure ASCII.
 	nel := string(rune(0x85))
 	got := sanitizeControl("x" + nel + "y")
 	require.NotContains(t, got, nel)

@@ -9,9 +9,9 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/stretchr/testify/require"
 	"github.com/wow-look-at-my/log-streamer/internal/protocol"
 	"github.com/wow-look-at-my/log-streamer/internal/server"
-	"github.com/stretchr/testify/require"
 )
 
 func startClientTestServer(t *testing.T) *httptest.Server {
@@ -106,7 +106,7 @@ func TestClientRun(t *testing.T) {
 	pointClientAt(t, ts)
 	captureStdout(t)
 
-	// Exits 0, writes to both stdout and stderr, so both pumps run.
+	// Exits cleanly, writes to both stdout and stderr, so both pumps run.
 	require.NoError(t, runRun(runCmd, []string{"sh", "-c", "echo out; echo err 1>&2"}))
 }
 
@@ -114,8 +114,7 @@ func TestClientRunViaCLIWithChildFlags(t *testing.T) {
 	ts := startClientTestServer(t)
 	captureStdout(t)
 
-	// Drive the real cobra path: the child's `-c` flag must reach sh, not be
-	// parsed as a flag of log-streamer-client.
+	// Drive the real cobra path: the child's `-c` flag must reach sh, not us.
 	host := strings.TrimPrefix(ts.URL, "http://")
 	origURL := serverURL
 	rootCmd.SetArgs([]string{"--server", "ws://" + host, "run", "sh", "-c", "echo viaCLI"})

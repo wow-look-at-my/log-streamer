@@ -7,8 +7,8 @@ import (
 	"time"
 )
 
-// StreamID identifies which output stream a frame belongs to. It is encoded as
-// a single byte on the wire and on disk.
+// StreamID identifies which output stream a frame belongs to; encoded as a
+// byte on the wire and on disk.
 type StreamID byte
 
 const (
@@ -30,17 +30,16 @@ func (s StreamID) String() string {
 	}
 }
 
-// FrameHeaderSize is the fixed prefix of a wire frame body: a 1-byte stream id
-// followed by an 8-byte big-endian Unix-nanosecond timestamp. The payload (raw
-// log bytes) follows and runs to the end of the frame.
+// FrameHeaderSize is the wire frame prefix: a stream id byte followed by a
+// big-endian Unix-nanosecond timestamp. The raw payload fills the rest.
 const FrameHeaderSize = 1 + 8
 
 // ErrShortFrame is returned when a frame body is smaller than the header.
 var ErrShortFrame = errors.New("frame too short")
 
-// EncodeWire builds a frame body: [stream:1][ts:8][payload...]. The payload is
-// stored verbatim, so any bytes (text or binary) round-trip exactly and a chunk
-// may be cut at any byte boundary.
+// EncodeWire builds a frame body: [stream][timestamp][payload]. The payload
+// is stored verbatim, so any bytes round-trip exactly and a chunk may be cut
+// at any byte boundary.
 func EncodeWire(stream StreamID, ts time.Time, payload []byte) []byte {
 	b := make([]byte, FrameHeaderSize+len(payload))
 	b[0] = byte(stream)
