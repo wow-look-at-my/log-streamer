@@ -16,11 +16,16 @@ var sendCmd = &cobra.Command{
 }
 
 func init() {
+	addStreamTokenFlag(sendCmd)
 	rootCmd.AddCommand(sendCmd)
 }
 
 func runSend(cmd *cobra.Command, args []string) error {
-	conn, _, err := websocket.DefaultDialer.Dial(getWSURL()+"/api/stream", nil)
+	wsURL, err := streamURL()
+	if err != nil {
+		return err
+	}
+	conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
 	if err != nil {
 		return fmt.Errorf("connecting to server: %w", err)
 	}
@@ -30,7 +35,7 @@ func runSend(cmd *cobra.Command, args []string) error {
 	if err := conn.ReadJSON(&hello); err != nil {
 		return fmt.Errorf("reading token: %w", err)
 	}
-	fmt.Fprintf(os.Stderr, "log-streamer token: %s\n", hello.Token)
+	announceToken(hello.Token)
 
 	pingDone := make(chan struct{})
 	startPinger(conn, pingDone)

@@ -1,0 +1,80 @@
+name: 'Stream build output'
+description: 'Run a command with its output streamed to log-streamer, readable while the run is still in flight'
+
+inputs:
+  run:
+    description: 'Command to run. Streamed to the server and still written to this job log.'
+    required: true
+  server:
+    description: 'log-streamer server URL (ws:// or wss://)'
+    required: true
+  stream-key:
+    description: 'Shared key the stream token derives from. Whoever watches needs the same key.'
+    required: true
+  name:
+    description: 'Extra context separating streams inside a job. Matrix legs MUST set this, or every leg writes to the same stream.'
+    required: false
+    default: ''
+  working-directory:
+    description: 'Directory to run the command in'
+    required: false
+    default: '.'
+  client-url:
+    description: 'Where to fetch the client binary'
+    required: false
+    default: 'https://dl.pazer.build/log-streamer/client'
+
+outputs:
+  token:
+    description: 'The derived stream token, which a holder of the key computes without reading this log'
+    value: ${{ steps.derive.outputs.token }}
+
+runs:
+  using: composite
+  steps:
+    # A static binary staged in the runner temp needs no package manager and no credential.
+    - name: Install the log-streamer client
+      shell: bash
+      env:
+        CLIENT_URL: ${{ inputs.client-url }}
+      run: |
+        set -euo pipefail
+        case "${RUNNER_OS}" in
+          Linux) os=linux ;;
+          macOS) os=darwin ;;
+          Windows) os=windows ;;
+        esac
+        case "${RUNNER_ARCH}" in
+          X64) arch=amd64 ;;
+          ARM64) arch=arm64 ;;
+        esac
+        curl -fL --compressed --connect-timeout 20 --max-time 120 \
+          -o "${RUNNER_TEMP}/log-streamer-client" "${CLIENT_URL}?os=${os}&arch=${arch}"
+        chmod +x "${RUNNER_TEMP}/log-streamer-client"
+
+    # Derived, never announced: a minted token's only channel back is this withheld log.
+    - name: Derive the stream token
+      id: derive
+      shell: bash
+      env:
+        LOG_STREAMER_STREAM_KEY: ${{ inputs.stream-key }}
+        STREAM_NAME: ${{ inputs.name }}
+      run: |
+        set -euo pipefail
+        tok="$("${RUNNER_TEMP}/log-streamer-client" token derive --name "${STREAM_NAME}")"
+        echo "::add-mask::${tok}"
+        echo "token=${tok}" >> "$GITHUB_OUTPUT"
+
+    # The client tees to stdout and exits with the command's status, so this log keeps every byte and a failure still fails the build.
+    - name: Run the command
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        LOG_STREAMER_SERVER: ${{ inputs.server }}
+        LOG_STREAMER_TOKEN: ${{ steps.derive.outputs.token }}
+        STEP_SCRIPT: ${{ inputs.run }}
+      run: |
+        set -euo pipefail
+        script="${RUNNER_TEMP}/log-streamer-step-$$.sh"
+        printf '%s\n' "${STEP_SCRIPT}" > "${script}"
+        "${RUNNER_TEMP}/log-streamer-client" run bash -eo pipefail "${script}"
