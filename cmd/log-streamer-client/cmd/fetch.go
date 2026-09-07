@@ -26,8 +26,7 @@ var (
 	fetchInterval time.Duration
 )
 
-// errStreamNotFound marks a token the server holds no log for. --follow waits
-// through it, because the writer may not have connected yet.
+// errStreamNotFound marks a token the server holds no log for.
 var errStreamNotFound = errors.New("stream not found")
 
 var fetchCmd = &cobra.Command{

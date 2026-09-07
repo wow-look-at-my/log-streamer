@@ -34,8 +34,7 @@ func (s *Server) handleFetch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Count stays the total so a follower can spot a stream that shrank (a
-	// delete and restart) and rewind, instead of waiting on a cursor past the end.
+	// Count stays the total, so a follower can spot a log that shrank and rewind.
 	total := len(lines)
 	if since > total {
 		since = total
