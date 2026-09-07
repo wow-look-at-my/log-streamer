@@ -55,10 +55,7 @@ func runFetch(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// Stored log content is untrusted. When writing to a terminal, escape
-	// control sequences so a log line cannot drive the viewer's terminal
-	// (cursor moves, title changes, etc.). When piped or redirected, emit
-	// bytes unchanged so downstream tools and files see the original output.
+	// Untrusted log content: escape control sequences on a terminal only.
 	sanitize := !fetchRaw && isTerminal(os.Stdout)
 
 	out := bufio.NewWriter(os.Stdout)

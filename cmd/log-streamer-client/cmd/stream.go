@@ -9,20 +9,18 @@ import (
 	"github.com/wow-look-at-my/log-streamer/internal/protocol"
 )
 
-// chunkSize bounds how many bytes are read and sent per frame. Memory use stays
-// O(chunkSize) regardless of how long any single log line is.
+// chunkSize bounds bytes read and sent per frame.
 const chunkSize = 32 * 1024
 
-// wsSender serializes binary writes to one WebSocket connection so the stdout
-// and stderr pumps can share it. Control writes (pings) are safe to issue
-// concurrently with these per the gorilla/websocket contract.
+// wsSender serializes binary frame writes to a shared connection; control
+// writes stay safe to interleave.
 type wsSender struct {
 	conn *websocket.Conn
 	mu   sync.Mutex
 }
 
-// sendFrame encodes and sends one frame. The payload is copied during encoding,
-// so the caller may reuse its buffer immediately after this returns.
+// sendFrame encodes and sends a frame; the payload is copied, so callers may
+// reuse their buffer right after.
 func (s *wsSender) sendFrame(stream protocol.StreamID, ts time.Time, payload []byte) error {
 	body := protocol.EncodeWire(stream, ts, payload)
 	s.mu.Lock()

@@ -1,9 +1,9 @@
 package token
 
 import (
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"testing"
-	"github.com/wow-look-at-my/testify/assert"
-	"github.com/wow-look-at-my/testify/require"
 )
 
 func TestGenerate(t *testing.T) {
@@ -25,8 +25,8 @@ func TestGenerateUnique(t *testing.T) {
 
 func TestValidate(t *testing.T) {
 	tests := []struct {
-		input	string
-		want	bool
+		input string
+		want  bool
 	}{
 		{"", false},
 		{"abc", false},

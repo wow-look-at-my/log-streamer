@@ -5,14 +5,24 @@ import (
 	"net/http/httptest"
 	"os"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/stretchr/testify/require"
 	"github.com/wow-look-at-my/log-streamer/internal/protocol"
 	"github.com/wow-look-at-my/log-streamer/internal/server"
-	"github.com/wow-look-at-my/testify/require"
 )
+
+// globalStateMu serializes tests mutating shared package state (serverURL, os.Stdout).
+var globalStateMu sync.Mutex
+
+func lockGlobalState(t *testing.T) {
+	t.Helper()
+	globalStateMu.Lock()
+	t.Cleanup(globalStateMu.Unlock)
+}
 
 func startClientTestServer(t *testing.T) *httptest.Server {
 	t.Helper()
@@ -63,6 +73,7 @@ func streamOneFrame(t *testing.T, ts *httptest.Server, payload string) string {
 }
 
 func TestClientFetchAndDelete(t *testing.T) {
+	lockGlobalState(t)
 	ts := startClientTestServer(t)
 	pointClientAt(t, ts)
 	captureStdout(t)
@@ -76,6 +87,7 @@ func TestClientFetchAndDelete(t *testing.T) {
 }
 
 func TestClientFetchInvalidToken(t *testing.T) {
+	lockGlobalState(t)
 	ts := startClientTestServer(t)
 	pointClientAt(t, ts)
 	captureStdout(t)
@@ -84,6 +96,7 @@ func TestClientFetchInvalidToken(t *testing.T) {
 }
 
 func TestClientSend(t *testing.T) {
+	lockGlobalState(t)
 	ts := startClientTestServer(t)
 	pointClientAt(t, ts)
 	captureStdout(t)
@@ -102,20 +115,21 @@ func TestClientSend(t *testing.T) {
 }
 
 func TestClientRun(t *testing.T) {
+	lockGlobalState(t)
 	ts := startClientTestServer(t)
 	pointClientAt(t, ts)
 	captureStdout(t)
 
-	// Exits 0, writes to both stdout and stderr, so both pumps run.
+	// Exits cleanly, writes to both stdout and stderr, so both pumps run.
 	require.NoError(t, runRun(runCmd, []string{"sh", "-c", "echo out; echo err 1>&2"}))
 }
 
 func TestClientRunViaCLIWithChildFlags(t *testing.T) {
+	lockGlobalState(t)
 	ts := startClientTestServer(t)
 	captureStdout(t)
 
-	// Drive the real cobra path: the child's `-c` flag must reach sh, not be
-	// parsed as a flag of log-streamer-client.
+	// Drive the real cobra path: the child's `-c` flag must reach sh, not us.
 	host := strings.TrimPrefix(ts.URL, "http://")
 	origURL := serverURL
 	rootCmd.SetArgs([]string{"--server", "ws://" + host, "run", "sh", "-c", "echo viaCLI"})
@@ -126,6 +140,7 @@ func TestClientRunViaCLIWithChildFlags(t *testing.T) {
 }
 
 func TestClientRunConnectError(t *testing.T) {
+	lockGlobalState(t)
 	orig := serverURL
 	serverURL = "ws://127.0.0.1:1" // nothing listening
 	defer func() { serverURL = orig }()

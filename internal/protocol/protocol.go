@@ -2,17 +2,16 @@ package protocol
 
 import "time"
 
-// StreamMessage is a single reassembled log line in a FetchResponse. It is the
-// JSON shape returned by the fetch HTTP API; log data on the wire and on disk
-// uses the compact binary frame format in wire.go.
+// StreamMessage is a reassembled log line returned by the fetch API. The wire
+// and disk format is the compact binary frame in wire.go.
 type StreamMessage struct {
 	Timestamp time.Time `json:"ts"`
 	Line      string    `json:"line"`
 	Stream    string    `json:"stream"`
 }
 
-// ServerHello is the first message the server sends on a stream connection
-// (JSON text frame), carrying the freshly minted token.
+// ServerHello is the JSON text frame the server opens a stream connection
+// with, carrying the freshly minted token.
 type ServerHello struct {
 	Token string `json:"token"`
 }

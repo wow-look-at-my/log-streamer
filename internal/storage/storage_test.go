@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
 	"github.com/wow-look-at-my/log-streamer/internal/protocol"
-	"github.com/wow-look-at-my/testify/require"
 )
 
 const testToken = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
@@ -56,7 +56,7 @@ func TestChunkedLineReassembly(t *testing.T) {
 	store, err := New(Options{Dir: t.TempDir()})
 	require.NoError(t, err)
 
-	// A single logical line split across three frames, completed by a newline.
+	// A single logical line split across multiple frames, completed by a newline.
 	writeFrames(t, store, testToken,
 		frame(protocol.StreamStdout, "abc"),
 		frame(protocol.StreamStdout, "def"),
@@ -73,8 +73,7 @@ func TestArbitrarilyLongLine(t *testing.T) {
 	store, err := New(Options{Dir: t.TempDir()})
 	require.NoError(t, err)
 
-	// 1 MiB of content with no newline until the very end, delivered in many
-	// frames. This must round-trip as a single line.
+	// A mebibyte with no newline until the end, round-tripping as a line.
 	const total = 1 << 20
 	big := strings.Repeat("x", total)
 	w, err := store.OpenWriter(testToken)
@@ -125,7 +124,7 @@ func TestInterleavedStreams(t *testing.T) {
 	lines, err := store.Fetch(testToken)
 	require.NoError(t, err)
 	require.Equal(t, 2, len(lines))
-	// stderr completed first.
+	// stderr completes before stdout.
 	require.Equal(t, "stderr", lines[0].Stream)
 	require.Equal(t, "an error", lines[0].Line)
 	require.Equal(t, "stdout", lines[1].Stream)
@@ -136,8 +135,7 @@ func TestBinaryPayloadPreserved(t *testing.T) {
 	store, err := New(Options{Dir: t.TempDir()})
 	require.NoError(t, err)
 
-	// Bytes that JSON-string storage would have mangled: NUL, an invalid UTF-8
-	// byte, and an ESC. They must survive verbatim through the binary format.
+	// NUL, an invalid byte, and an ESC survive verbatim in the binary format.
 	raw := string([]byte{0x00, 0xff, 0x1b, '[', '0', 'm', '\n'})
 	writeFrames(t, store, testToken, frame(protocol.StreamStdout, raw))
 
@@ -155,9 +153,9 @@ func TestPerStreamCap(t *testing.T) {
 	require.NoError(t, err)
 	defer w.Close()
 
-	// Each frame body is FrameHeaderSize(9)+payload. "ab" => 11 bytes, ok.
+	// Each record is FrameHeaderSize plus payload; "ab" fits under the cap.
 	require.NoError(t, w.Append(frame(protocol.StreamStdout, "ab")))
-	// Next 11-byte frame would push total to 22 > 12.
+	// Appending "cd" would push the stream over the cap.
 	require.ErrorIs(t, w.Append(frame(protocol.StreamStdout, "cd")), ErrStreamFull)
 }
 

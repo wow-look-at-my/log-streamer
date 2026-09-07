@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/stretchr/testify/require"
 	"github.com/wow-look-at-my/log-streamer/internal/protocol"
-	"github.com/wow-look-at-my/testify/require"
 )
 
 func testServer(t *testing.T, cfg Config) *Server {
@@ -144,7 +144,7 @@ func TestStreamPerStreamCap(t *testing.T) {
 	defer ts.Close()
 
 	conn, hello := dialStream(t, ts)
-	sendFrame(t, conn, protocol.StreamStdout, "first\n") // 15 bytes body, ok
+	sendFrame(t, conn, protocol.StreamStdout, "first\n") // under the cap
 	// This frame pushes over the cap; the server should reject and close.
 	sendFrame(t, conn, protocol.StreamStdout, "second line that is too big\n")
 
