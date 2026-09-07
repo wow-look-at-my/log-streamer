@@ -109,8 +109,7 @@ func followStream(ctx context.Context, out *bufio.Writer, tok string, sanitize b
 	}
 }
 
-// fetchSince reads the log from a line offset. The response carries the total
-// count, so a caller can tell whether it has fallen behind or ahead.
+// fetchSince reads the log from a line offset, plus the total count.
 func fetchSince(tok string, since int) (protocol.FetchResponse, error) {
 	var out protocol.FetchResponse
 
