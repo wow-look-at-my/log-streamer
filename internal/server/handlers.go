@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"os"
+	"strconv"
 
 	"github.com/wow-look-at-my/log-streamer/internal/protocol"
 	"github.com/wow-look-at-my/log-streamer/internal/token"
@@ -14,6 +15,12 @@ func (s *Server) handleFetch(w http.ResponseWriter, r *http.Request) {
 	tok := r.PathValue("token")
 	if !token.Validate(tok) {
 		writeJSON(w, http.StatusBadRequest, protocol.ErrorResponse{Error: "invalid token format"})
+		return
+	}
+
+	since, err := parseSince(r.URL.Query().Get("since"))
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, protocol.ErrorResponse{Error: err.Error()})
 		return
 	}
 
@@ -27,10 +34,17 @@ func (s *Server) handleFetch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Count stays the total so a follower can spot a stream that shrank (a
+	// delete and restart) and rewind, instead of waiting on a cursor past the end.
+	total := len(lines)
+	if since > total {
+		since = total
+	}
+
 	writeJSON(w, http.StatusOK, protocol.FetchResponse{
 		Token: tok,
-		Lines: lines,
-		Count: len(lines),
+		Lines: lines[since:],
+		Count: total,
 	})
 }
 
@@ -51,6 +65,19 @@ func (s *Server) handleDelete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// parseSince reads the line offset a follower resumes from. Empty means the
+// whole log.
+func parseSince(raw string) (int, error) {
+	if raw == "" {
+		return 0, nil
+	}
+	n, err := strconv.Atoi(raw)
+	if err != nil || n < 0 {
+		return 0, errors.New("since must be a non-negative integer")
+	}
+	return n, nil
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {

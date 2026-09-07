@@ -32,12 +32,23 @@ func (s *Server) handleStream(w http.ResponseWriter, r *http.Request) {
 	defer conn.Close()
 	conn.SetReadLimit(maxFrameBytes)
 
-	tok, err := token.Generate()
-	if err != nil {
-		log.Printf("token generation: %v", err)
+	// A caller may name its own stream. CI needs this: a server-minted token
+	// only ever reaches the caller over this socket, and a CI job's only way to
+	// report it is its log, which the provider hides until the run ends.
+	tok := r.URL.Query().Get("token")
+	if tok != "" && !token.Validate(tok) {
 		conn.WriteMessage(websocket.CloseMessage,
-			websocket.FormatCloseMessage(websocket.CloseInternalServerErr, "token generation failed"))
+			websocket.FormatCloseMessage(websocket.ClosePolicyViolation, "invalid token format"))
 		return
+	}
+	if tok == "" {
+		var err error
+		if tok, err = token.Generate(); err != nil {
+			log.Printf("token generation: %v", err)
+			conn.WriteMessage(websocket.CloseMessage,
+				websocket.FormatCloseMessage(websocket.CloseInternalServerErr, "token generation failed"))
+			return
+		}
 	}
 
 	if err := conn.WriteJSON(protocol.ServerHello{Token: tok}); err != nil {

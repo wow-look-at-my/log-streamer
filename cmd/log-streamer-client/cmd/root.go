@@ -2,15 +2,20 @@ package cmd
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"strings"
 	"time"
 
 	"github.com/gorilla/websocket"
 	"github.com/spf13/cobra"
+	"github.com/wow-look-at-my/log-streamer/internal/token"
 )
 
-var serverURL string
+var (
+	serverURL   string
+	streamToken string
+)
 
 var rootCmd = &cobra.Command{
 	Use:   "log-streamer-client",
@@ -19,6 +24,34 @@ var rootCmd = &cobra.Command{
 
 func init() {
 	rootCmd.PersistentFlags().StringVar(&serverURL, "server", "", "server URL (overrides LOG_STREAMER_SERVER env)")
+}
+
+// streamURL builds the stream endpoint, naming the stream when the caller
+// chose a token. A caller that names its own stream can read the log back
+// before the writer finishes, which is the point in CI.
+func streamURL() (string, error) {
+	base := getWSURL() + "/api/stream"
+	tok := getStreamToken()
+	if tok == "" {
+		return base, nil
+	}
+	if !token.Validate(tok) {
+		return "", fmt.Errorf("token must be 64 hex characters, got %q", tok)
+	}
+	return base + "?token=" + url.QueryEscape(tok), nil
+}
+
+func getStreamToken() string {
+	if streamToken != "" {
+		return streamToken
+	}
+	return os.Getenv("LOG_STREAMER_TOKEN")
+}
+
+// addStreamTokenFlag registers --token on a command that opens a stream.
+func addStreamTokenFlag(cmd *cobra.Command) {
+	cmd.Flags().StringVar(&streamToken, "token", "",
+		"stream into this 64-hex token instead of a server-generated one (overrides LOG_STREAMER_TOKEN env)")
 }
 
 func Execute() {

@@ -2,19 +2,33 @@ package cmd
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
+	"os/signal"
+	"strconv"
 	"strings"
+	"syscall"
+	"time"
 	"unicode"
 
 	"github.com/spf13/cobra"
 	"github.com/wow-look-at-my/log-streamer/internal/protocol"
 )
 
-var fetchRaw bool
+var (
+	fetchRaw      bool
+	fetchFollow   bool
+	fetchInterval time.Duration
+)
+
+// errStreamNotFound marks a token the server holds no log for. --follow waits
+// through it, because the writer may not have connected yet.
+var errStreamNotFound = errors.New("stream not found")
 
 var fetchCmd = &cobra.Command{
 	Use:   "fetch <token>",
@@ -26,42 +40,114 @@ var fetchCmd = &cobra.Command{
 func init() {
 	fetchCmd.Flags().BoolVar(&fetchRaw, "raw", false,
 		"print log content verbatim, without escaping terminal control sequences")
+	fetchCmd.Flags().BoolVarP(&fetchFollow, "follow", "f", false,
+		"keep polling and print new lines as they arrive, until interrupted")
+	fetchCmd.Flags().DurationVar(&fetchInterval, "interval", time.Second,
+		"how often --follow polls for new lines")
 	rootCmd.AddCommand(fetchCmd)
 }
 
 func runFetch(cmd *cobra.Command, args []string) error {
 	tok := args[0]
-	resp, err := http.Get(getHTTPURL() + "/api/logs/" + tok)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return err
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		var errResp protocol.ErrorResponse
-		if json.Unmarshal(body, &errResp) == nil && errResp.Error != "" {
-			return fmt.Errorf("server: %s", errResp.Error)
-		}
-		return fmt.Errorf("server returned %d", resp.StatusCode)
-	}
-
-	var fetchResp protocol.FetchResponse
-	if err := json.Unmarshal(body, &fetchResp); err != nil {
-		return err
-	}
-
 	// Untrusted log content: escape control sequences on a terminal only.
 	sanitize := !fetchRaw && isTerminal(os.Stdout)
 
 	out := bufio.NewWriter(os.Stdout)
 	defer out.Flush()
 
-	for _, line := range fetchResp.Lines {
+	if !fetchFollow {
+		resp, err := fetchSince(tok, 0)
+		if err != nil {
+			return err
+		}
+		writeLines(out, resp.Lines, sanitize)
+		return nil
+	}
+	return followStream(cmd.Context(), out, tok, sanitize)
+}
+
+// followStream prints new lines on a fixed cadence until the caller interrupts.
+// A log still being written reads back fine, so this trails a live stream.
+func followStream(ctx context.Context, out *bufio.Writer, tok string, sanitize bool) error {
+	ctx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	ticker := time.NewTicker(fetchInterval)
+	defer ticker.Stop()
+
+	cursor := 0
+	waiting := false
+	for {
+		resp, err := fetchSince(tok, cursor)
+		switch {
+		case errors.Is(err, errStreamNotFound):
+			// A watcher can compute the token before the build reaches the step
+			// that streams, so an absent log means "not yet", never "give up".
+			if !waiting {
+				fmt.Fprintf(os.Stderr, "waiting for stream %s\n", tok)
+				waiting = true
+			}
+		case err != nil:
+			return err
+		case resp.Count < cursor:
+			// The log shrank, so it was deleted and restarted. Re-read it.
+			cursor = 0
+			continue
+		default:
+			writeLines(out, resp.Lines, sanitize)
+			if err := out.Flush(); err != nil {
+				return err
+			}
+			cursor += len(resp.Lines)
+		}
+
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-ticker.C:
+		}
+	}
+}
+
+// fetchSince reads the log from a line offset. The response carries the total
+// count, so a caller can tell whether it has fallen behind or ahead.
+func fetchSince(tok string, since int) (protocol.FetchResponse, error) {
+	var out protocol.FetchResponse
+
+	target := getHTTPURL() + "/api/logs/" + tok
+	if since > 0 {
+		target += "?since=" + strconv.Itoa(since)
+	}
+	resp, err := http.Get(target)
+	if err != nil {
+		return out, err
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return out, err
+	}
+
+	if resp.StatusCode == http.StatusNotFound {
+		return out, errStreamNotFound
+	}
+	if resp.StatusCode != http.StatusOK {
+		var errResp protocol.ErrorResponse
+		if json.Unmarshal(body, &errResp) == nil && errResp.Error != "" {
+			return out, fmt.Errorf("server: %s", errResp.Error)
+		}
+		return out, fmt.Errorf("server returned %d", resp.StatusCode)
+	}
+
+	if err := json.Unmarshal(body, &out); err != nil {
+		return out, err
+	}
+	return out, nil
+}
+
+func writeLines(out *bufio.Writer, lines []protocol.StreamMessage, sanitize bool) {
+	for _, line := range lines {
 		text := line.Line
 		if sanitize {
 			text = sanitizeControl(text)
@@ -69,7 +155,6 @@ func runFetch(cmd *cobra.Command, args []string) error {
 		fmt.Fprintf(out, "[%s] [%s] %s\n",
 			line.Timestamp.Format("2006-01-02T15:04:05Z07:00"), line.Stream, text)
 	}
-	return nil
 }
 
 func isTerminal(f *os.File) bool {

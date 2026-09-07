@@ -21,11 +21,16 @@ var runCmd = &cobra.Command{
 func init() {
 	// Stop own-flag parsing at the child's arg, so `run make -j4` isn't misread.
 	runCmd.Flags().SetInterspersed(false)
+	addStreamTokenFlag(runCmd)
 	rootCmd.AddCommand(runCmd)
 }
 
 func runRun(cmd *cobra.Command, args []string) error {
-	conn, _, err := websocket.DefaultDialer.Dial(getWSURL()+"/api/stream", nil)
+	wsURL, err := streamURL()
+	if err != nil {
+		return err
+	}
+	conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
 	if err != nil {
 		return fmt.Errorf("connecting to server: %w", err)
 	}
