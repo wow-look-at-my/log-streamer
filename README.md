@@ -122,12 +122,16 @@ ls-client fetch --step 3 "$token"    # that step's output only
 ls-client fetch --step "make test" "$token"
 ```
 
-A step is named by its position, by the runner's step id (`__run_2`), or by its name. Actions exports no step name to a step. So a step is labelled with the command it opens with. Set `LOG_STREAMER_STEP_NAME` on a step to label it yourself:
+A step is named by its position, by the runner's step id, or by its name. Actions exports no step name to a step. So a step is labelled with the command it opens with.
+
+Two things give a step a better name. A step's `id:` becomes its `GITHUB_ACTION` value, which is otherwise `__run`, `__run_2`, and so on. `LOG_STREAMER_STEP_NAME` sets the label directly:
 
 ```yaml
 - run: make test
+  id: tests                       # ls-client fetch --step tests
+- run: make bench
   env:
-    LOG_STREAMER_STEP_NAME: Tests
+    LOG_STREAMER_STEP_NAME: Benchmarks
 ```
 
 A plain `fetch` prints the whole log with a header at each step boundary. `--raw` leaves the markers out, so piped output is only what the commands wrote.

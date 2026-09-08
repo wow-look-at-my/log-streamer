@@ -37,8 +37,8 @@ func EncodeMarker(m Marker) ([]byte, error) {
 	return append(b, '\n'), nil
 }
 
-// IsMarkerStream matches a fetched line's stream name. The server renders that
-// name, and a server older than markers spells this wire id "stream3".
+// IsMarkerStream matches a fetched line's stream name. The server renders it,
+// and a server older than markers spells this id "stream3".
 func IsMarkerStream(name string) bool {
 	return name == StreamMarker.String() || name == fmt.Sprintf("stream%d", byte(StreamMarker))
 }
