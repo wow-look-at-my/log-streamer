@@ -29,35 +29,19 @@ runs:
       with:
         project: log-streamer/ls-client
 
-    # The job names ls-client as its shell, and the runner resolves that name on PATH.
-    - name: Put the client on PATH
-      shell: bash
-      run: |
-        set -euo pipefail
-        dirname "${{ steps.client.outputs.path }}" >> "${GITHUB_PATH}"
-
     # Derived, never announced: a minted token's only channel back is this withheld log.
-    - name: Derive the stream token
+    - name: Point the job's steps at the stream
       id: derive
       shell: bash
       env:
         LOG_STREAMER_STREAM_KEY: ${{ inputs.stream-key }}
         STREAM_NAME: ${{ inputs.name }}
+        SERVER: ${{ inputs.server }}
       run: |
         set -euo pipefail
+        dirname "${{ steps.client.outputs.path }}" >> "${GITHUB_PATH}"
         tok="$("${{ steps.client.outputs.path }}" token derive --name "${STREAM_NAME}")"
         echo "::add-mask::${tok}"
-        echo "token=${tok}" >> "$GITHUB_OUTPUT"
-
-    # Later steps inherit these, so each appends to the one stream as its own section.
-    - name: Point the job's steps at the stream
-      shell: bash
-      env:
-        SERVER: ${{ inputs.server }}
-        TOKEN: ${{ steps.derive.outputs.token }}
-      run: |
-        set -euo pipefail
-        echo "LOG_STREAMER_TOKEN=${TOKEN}" >> "${GITHUB_ENV}"
-        if [ -n "${SERVER}" ]; then
-          echo "LOG_STREAMER_SERVER=${SERVER}" >> "${GITHUB_ENV}"
-        fi
+        echo "token=${tok}" >> "${GITHUB_OUTPUT}"
+        echo "LOG_STREAMER_TOKEN=${tok}" >> "${GITHUB_ENV}"
+        echo "LOG_STREAMER_SERVER=${SERVER}" >> "${GITHUB_ENV}"

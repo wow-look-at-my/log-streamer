@@ -37,28 +37,20 @@ runs:
         project: log-streamer/ls-client
 
     # Derived, never announced: a minted token's only channel back is this withheld log.
-    - name: Derive the stream token
+    - name: Run the command
       id: derive
       shell: bash
+      working-directory: ${{ inputs.working-directory }}
       env:
         LOG_STREAMER_STREAM_KEY: ${{ inputs.stream-key }}
+        LOG_STREAMER_SERVER: ${{ inputs.server }}
         STREAM_NAME: ${{ inputs.name }}
+        STEP_SCRIPT: ${{ inputs.run }}
       run: |
         set -euo pipefail
         tok="$("${{ steps.client.outputs.path }}" token derive --name "${STREAM_NAME}")"
         echo "::add-mask::${tok}"
-        echo "token=${tok}" >> "$GITHUB_OUTPUT"
-
-    # The client tees to stdout and exits with the command's status, so this log keeps every byte and a failure still fails the build.
-    - name: Run the command
-      shell: bash
-      working-directory: ${{ inputs.working-directory }}
-      env:
-        LOG_STREAMER_SERVER: ${{ inputs.server }}
-        LOG_STREAMER_TOKEN: ${{ steps.derive.outputs.token }}
-        STEP_SCRIPT: ${{ inputs.run }}
-      run: |
-        set -euo pipefail
+        echo "token=${tok}" >> "${GITHUB_OUTPUT}"
         script="${RUNNER_TEMP}/log-streamer-step-$$.sh"
         printf '%s\n' "${STEP_SCRIPT}" > "${script}"
-        "${{ steps.client.outputs.path }}" shell "${script}"
+        LOG_STREAMER_TOKEN="${tok}" "${{ steps.client.outputs.path }}" shell "${script}"
