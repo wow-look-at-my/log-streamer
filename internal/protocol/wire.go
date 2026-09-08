@@ -14,8 +14,7 @@ const (
 	StreamStdout StreamID = 0
 	StreamStderr StreamID = 1
 	StreamStdin  StreamID = 2
-	// StreamMarker carries structure rather than output: a JSON line per step
-	// boundary, reassembled by the store like any other line.
+	// StreamMarker carries structure, not output: a JSON line per step boundary.
 	StreamMarker StreamID = 3
 )
 

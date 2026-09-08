@@ -100,7 +100,7 @@ func groupSteps(lines []protocol.StreamMessage) (steps []step, preamble []protoc
 
 // markerOf reads a line written to the marker stream.
 func markerOf(line protocol.StreamMessage) (protocol.Marker, bool) {
-	if line.Stream != protocol.StreamMarker.String() {
+	if !protocol.IsMarkerStream(line.Stream) {
 		return protocol.Marker{}, false
 	}
 	return protocol.ParseMarker(line.Line)

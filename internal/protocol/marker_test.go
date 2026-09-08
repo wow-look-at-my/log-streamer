@@ -44,6 +44,15 @@ func TestParseMarkerRejectsNonMarkers(t *testing.T) {
 	}
 }
 
+// The server renders the stream name, and a deployed server can be older than
+// the client fetching from it.
+func TestIsMarkerStreamAcceptsTheOlderSpelling(t *testing.T) {
+	require.True(t, IsMarkerStream("marker"))
+	require.True(t, IsMarkerStream("stream3"), "a server predating markers names the wire id")
+	require.False(t, IsMarkerStream("stdout"))
+	require.False(t, IsMarkerStream("stream4"))
+}
+
 func TestMarkerLabelPrefersTheNameItsAuthorGave(t *testing.T) {
 	require.Equal(t, "Build", Marker{Name: "Build", Cmd: "make", Step: "__run"}.Label())
 	require.Equal(t, "make", Marker{Cmd: "make", Step: "__run"}.Label())

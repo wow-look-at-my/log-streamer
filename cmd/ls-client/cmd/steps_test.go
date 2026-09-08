@@ -10,7 +10,7 @@ import (
 	"github.com/wow-look-at-my/log-streamer/internal/protocol"
 )
 
-// markerLine builds the line a marker occupies once the store has reassembled it.
+// markerLine builds the line a marker occupies after the store reassembles it.
 func markerLine(t *testing.T, m protocol.Marker, at time.Time) protocol.StreamMessage {
 	t.Helper()
 	encoded, err := protocol.EncodeMarker(m)

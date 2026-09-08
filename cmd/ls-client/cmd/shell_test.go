@@ -45,7 +45,7 @@ func TestShellCommandMatchesTheFlagsActionsUses(t *testing.T) {
 	require.Equal(t, []string{"/bin/dash"}, shellCommand())
 }
 
-// A job's steps stream into one token, and the log comes back split by step.
+// A job's steps share a token, and the log comes back split by step.
 func TestShellStreamsAStepAndFetchSplitsItBack(t *testing.T) {
 	lockGlobalState(t)
 	captureStdout(t)

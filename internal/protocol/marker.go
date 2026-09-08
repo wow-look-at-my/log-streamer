@@ -2,6 +2,7 @@ package protocol
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 )
 
@@ -20,8 +21,7 @@ type Marker struct {
 	Job      string `json:"job,omitempty"`
 	Workflow string `json:"workflow,omitempty"`
 
-	// Cmd is the command the step opens with. Actions exports no step name, so
-	// this is what makes a section recognizable when nobody labelled it.
+	// Cmd is the command the step opens with, which names an unlabelled step.
 	Cmd string `json:"cmd,omitempty"`
 
 	// Exit is the step's status, carried by an end marker only.
@@ -35,6 +35,12 @@ func EncodeMarker(m Marker) ([]byte, error) {
 		return nil, err
 	}
 	return append(b, '\n'), nil
+}
+
+// IsMarkerStream matches a fetched line's stream name. The server renders that
+// name, and a server older than markers spells this wire id "stream3".
+func IsMarkerStream(name string) bool {
+	return name == StreamMarker.String() || name == fmt.Sprintf("stream%d", byte(StreamMarker))
 }
 
 // ParseMarker reads a line from the marker stream. It reports false for a line

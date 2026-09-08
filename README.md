@@ -71,7 +71,34 @@ Inside Actions the context defaults to `$GITHUB_REPOSITORY/$GITHUB_RUN_ID/$GITHU
 
 Matrix legs of a job share `GITHUB_JOB`. Give each leg its own `--name`. Without it, every leg writes into the same stream.
 
-### In a workflow
+### A whole job, every step
+
+Add the setup action and name `ls-client` as the job's shell. Every `run:` step in the job then streams into the same token. Each step marks itself:
+
+```yaml
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: ls-client shell {0}
+    steps:
+      - uses: wow-look-at-my/log-streamer/.github/actions/setup@master
+        with:
+          stream-key: ${{ secrets.LOG_STREAMER_STREAM_KEY }}
+          name: ${{ matrix.os }}      # required only for a matrix job
+      - uses: actions/checkout@v4
+      - run: make build
+      - run: make test
+```
+
+Put the setup action first. It installs the client, puts it on `PATH`, and exports the token. The runner then resolves the job's shell by name on every later step. A `uses:` step is unaffected, because a job default never reaches inside an action.
+
+Actions writes each step's script to a file and passes the path as `{0}`. `ls-client shell` runs it with the flags a `bash` step gets (`--noprofile --norc -e -o pipefail`), so a step behaves as it did before. Set `LOG_STREAMER_SHELL` to use a different interpreter.
+
+### A single command
+
+To stream just one step, wrap that command instead:
 
 ```yaml
 - uses: wow-look-at-my/log-streamer/.github/actions/stream@master
@@ -83,7 +110,27 @@ Matrix legs of a job share `GITHUB_JOB`. Give each leg its own `--name`. Without
       make test
 ```
 
-Set `server:` only to reach a different server. The action installs the client and derives the token. It then runs your command through the client. Output still reaches the job's own log. The command's exit status is still the step's status. A failing command still fails the build. The action masks the derived token, so the log never shows it.
+Set `server:` on either action only to reach a different server. Both install the client and derive the token. Output still reaches the job's own log. The command's exit status is still the step's status. Both actions mask the derived token, so the log never shows it.
+
+### Reading a job back, step by step
+
+A job's steps share a token, so the log arrives as one stream. The client splits it again from the markers each step wrote:
+
+```bash
+ls-client fetch --steps "$token"     # what ran, how it ended, how long it took
+ls-client fetch --step 3 "$token"    # that step's output only
+ls-client fetch --step "make test" "$token"
+```
+
+A step is named by its position, by the runner's step id (`__run_2`), or by its name. Actions exports no step name to a step. So a step is labelled with the command it opens with. Set `LOG_STREAMER_STEP_NAME` on a step to label it yourself:
+
+```yaml
+- run: make test
+  env:
+    LOG_STREAMER_STEP_NAME: Tests
+```
+
+A plain `fetch` prints the whole log with a header at each step boundary. `--raw` leaves the markers out, so piped output is only what the commands wrote.
 
 ### Watching from your machine
 
@@ -131,6 +178,8 @@ The `--server`, `--token` and `--key` flags override the matching environment va
 A server URL may be written as `wss://`, `ws://`, `https://`, `http://`, or a bare host. The client converts it to the scheme each request needs. A bare host becomes `wss://`.
 
 ## Protocol
+
+Frames on the `marker` stream carry a JSON step boundary rather than output: `{"event":"step_start","step":"__run_2","cmd":"make test","job":"test"}`, and an end marker with the step's `exit`. A reader that does not know them treats them as ordinary lines.
 
 - **Stream**: WebSocket at `/api/stream`. The server sends a JSON `hello` carrying the token. The client then streams log data as **binary frames**. The server sends a JSON `ack` with the byte count at the end. Each binary frame is `[stream:1 byte][timestamp:8 bytes big-endian unix-nanos][payload...]`. The payload is raw bytes, so any line length and any byte value survive. Pass `?token=<64 hex>` to name the stream yourself. The `hello` echoes back whichever token applies.
 - **Fetch**: `GET /api/logs/{token}` returns all reassembled log lines as JSON. `?since=<n>` returns only the lines from index `n`. The `count` field stays the total. `fetch --follow` uses that to trail a growing log.
