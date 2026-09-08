@@ -32,11 +32,9 @@ runs:
     # The job names ls-client as its shell, and the runner resolves that name on PATH.
     - name: Put the client on PATH
       shell: bash
-      env:
-        CLIENT_PATH: ${{ steps.client.outputs.path }}
       run: |
         set -euo pipefail
-        dirname "${CLIENT_PATH}" >> "${GITHUB_PATH}"
+        dirname "${{ steps.client.outputs.path }}" >> "${GITHUB_PATH}"
 
     # Derived, never announced: a minted token's only channel back is this withheld log.
     - name: Derive the stream token
@@ -47,7 +45,7 @@ runs:
         STREAM_NAME: ${{ inputs.name }}
       run: |
         set -euo pipefail
-        tok="$("${RUNNER_TEMP}/ls-client" token derive --name "${STREAM_NAME}")"
+        tok="$("${{ steps.client.outputs.path }}" token derive --name "${STREAM_NAME}")"
         echo "::add-mask::${tok}"
         echo "token=${tok}" >> "$GITHUB_OUTPUT"
 

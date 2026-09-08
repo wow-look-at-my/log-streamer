@@ -43,10 +43,9 @@ runs:
       env:
         LOG_STREAMER_STREAM_KEY: ${{ inputs.stream-key }}
         STREAM_NAME: ${{ inputs.name }}
-        CLIENT: ${{ steps.client.outputs.path }}
       run: |
         set -euo pipefail
-        tok="$("${CLIENT}" token derive --name "${STREAM_NAME}")"
+        tok="$("${{ steps.client.outputs.path }}" token derive --name "${STREAM_NAME}")"
         echo "::add-mask::${tok}"
         echo "token=${tok}" >> "$GITHUB_OUTPUT"
 
@@ -58,9 +57,8 @@ runs:
         LOG_STREAMER_SERVER: ${{ inputs.server }}
         LOG_STREAMER_TOKEN: ${{ steps.derive.outputs.token }}
         STEP_SCRIPT: ${{ inputs.run }}
-        CLIENT: ${{ steps.client.outputs.path }}
       run: |
         set -euo pipefail
         script="${RUNNER_TEMP}/log-streamer-step-$$.sh"
         printf '%s\n' "${STEP_SCRIPT}" > "${script}"
-        "${CLIENT}" shell "${script}"
+        "${{ steps.client.outputs.path }}" shell "${script}"
