@@ -121,7 +121,15 @@ func (s *Store) OpenWriter(tok string) (*Writer, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Writer{store: s, tok: tok, f: f}, nil
+	// A reconnecting client opens a second writer on a stream that already has
+	// bytes. Starting the count at zero hands it the whole per-stream cap again,
+	// so a stream that reconnects often has no cap at all. The file size counts
+	// the record headers too, which errs toward the cap and never past it.
+	w := &Writer{store: s, tok: tok, f: f}
+	if info, err := os.Stat(path); err == nil {
+		w.streamBytes = info.Size()
+	}
+	return w, nil
 }
 
 // Append stores a frame body as a length-prefixed record:
@@ -271,6 +279,22 @@ func (s *Store) Delete(tok string) error {
 		atomic.AddInt64(&s.totalBytes, -info.Size())
 	}
 	return nil
+}
+
+// StoredBytes is the size of what this stream already holds, in the record
+// framing the file is written in. A reconnecting client lines its own position
+// up against this number, so it resumes at a record boundary rather than
+// guessing. An absent stream holds nothing.
+func (s *Store) StoredBytes(tok string) int64 {
+	path, err := s.filePath(tok)
+	if err != nil {
+		return 0
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		return 0
+	}
+	return info.Size()
 }
 
 func (s *Store) Exists(tok string) bool {

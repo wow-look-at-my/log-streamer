@@ -1,9 +1,9 @@
 package cmd
 
 import (
-	"fmt"
 	"os"
 
+	"github.com/gorilla/websocket"
 	"github.com/spf13/cobra"
 	"github.com/wow-look-at-my/log-streamer/internal/protocol"
 )
@@ -24,23 +24,23 @@ func runSend(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	conn, err := dialStream(wsURL)
-	if err != nil {
-		return fmt.Errorf("connecting to server: %w", err)
-	}
-	defer conn.Close()
-
-	var hello protocol.ServerHello
-	if err := conn.ReadJSON(&hello); err != nil {
-		return fmt.Errorf("reading token: %w", err)
-	}
-	announceToken(hello.Token)
-
-	pingDone := make(chan struct{})
-	startPinger(conn, pingDone)
-	defer close(pingDone)
-
-	sender := &wsSender{conn: conn}
+	// A pipe gets the same guarantees a run does: the reader is never held up by
+	// the socket, and a socket that breaks is reconnected and resumed.
+	q := newQueue()
+	sender := newDurableSender(q, func() (*websocket.Conn, protocol.ServerHello, error) {
+		conn, err := dialStream(wsURL)
+		if err != nil {
+			return nil, protocol.ServerHello{}, err
+		}
+		var hello protocol.ServerHello
+		if err := conn.ReadJSON(&hello); err != nil {
+			conn.Close()
+			return nil, protocol.ServerHello{}, err
+		}
+		return conn, hello, nil
+	})
+	go sender.run()
+	go func() { announceToken(sender.awaitToken()) }()
 
 	// Piped output gets its own section when the runner's env names a step.
 	step := stepFromEnv()
@@ -58,7 +58,8 @@ func runSend(cmd *cobra.Command, args []string) error {
 		step.Event, step.Exit = protocol.EventStepEnd, &done
 		sendMarker(sender, *step)
 	}
-	closeStream(conn)
+	q.Close()
+	sender.wait()
 
 	return pumpErr
 }

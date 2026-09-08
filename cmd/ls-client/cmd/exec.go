@@ -21,27 +21,29 @@ func streamExec(args []string, step *protocol.Marker) error {
 	if err != nil {
 		return err
 	}
-	conn, err := dialStream(wsURL)
-	if err != nil {
-		return fmt.Errorf("connecting to server: %w", err)
-	}
-	defer conn.Close()
 
-	var hello protocol.ServerHello
-	if err := conn.ReadJSON(&hello); err != nil {
-		return fmt.Errorf("reading token: %w", err)
-	}
-	announceToken(hello.Token)
+	// The queue sits between the command and the socket, so the command's output
+	// never waits on the network and nothing is lost when the network breaks.
+	q := newQueue()
+	sender := newDurableSender(q, func() (*websocket.Conn, protocol.ServerHello, error) {
+		conn, err := dialStream(wsURL)
+		if err != nil {
+			return nil, protocol.ServerHello{}, err
+		}
+		var hello protocol.ServerHello
+		if err := conn.ReadJSON(&hello); err != nil {
+			conn.Close()
+			return nil, protocol.ServerHello{}, err
+		}
+		return conn, hello, nil
+	})
+	go sender.run()
 
-	pingDone := make(chan struct{})
-	startPinger(conn, pingDone)
-	defer close(pingDone)
-
-	sender := &wsSender{conn: conn}
 	if step != nil {
 		step.Event = protocol.EventStepStart
 		sendMarker(sender, *step)
 	}
+	go func() { announceToken(sender.awaitToken()) }()
 
 	child := exec.Command(args[0], args[1:]...)
 	child.Stdin = os.Stdin
@@ -72,6 +74,7 @@ func streamExec(args []string, step *protocol.Marker) error {
 
 	wg.Wait()
 	exitErr := child.Wait()
+	drainStart := time.Now()
 
 	code := 0
 	if exitErr != nil {
@@ -88,11 +91,17 @@ func streamExec(args []string, step *protocol.Marker) error {
 		sendMarker(sender, end)
 	}
 
-	closeStream(conn)
+	// The tail. Nothing waited on the network while the command ran, so the whole
+	// wait lands here, where there is no command left to slow down.
+	q.Close()
+	sender.wait()
+	if waited := time.Since(drainStart); waited > slowDrain {
+		fmt.Fprintf(os.Stderr, "log-streamer: the stream took %s to catch up after the command\n",
+			waited.Round(time.Second))
+	}
 
 	if exitErr != nil {
 		if _, ok := exitErr.(*exec.ExitError); ok {
-			conn.Close()
 			os.Exit(code)
 		}
 		return exitErr
@@ -102,6 +111,11 @@ func streamExec(args []string, step *protocol.Marker) error {
 
 // ackTimeout bounds the wait for the server to confirm what it stored.
 const ackTimeout = 10 * time.Second
+
+// slowDrain is when a catch-up is worth saying out loud. A step that ends and
+// then sits here is a step whose stream was behind, and silence about that reads
+// as the step itself being slow.
+const slowDrain = 5 * time.Second
 
 // closeStream ends the stream and waits for the server to answer. Ordering
 // holds within a connection and not between separate ones, and each step of a
@@ -131,7 +145,7 @@ func closeStream(conn *websocket.Conn) {
 
 // sendMarker reports a failure to stderr and continues. A lost boundary costs
 // a reader a section header; it must never fail the step it wraps.
-func sendMarker(s *wsSender, m protocol.Marker) {
+func sendMarker(s *durableSender, m protocol.Marker) {
 	payload, err := protocol.EncodeMarker(m)
 	if err == nil {
 		err = s.sendFrame(protocol.StreamMarker, time.Now().UTC(), payload)

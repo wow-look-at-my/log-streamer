@@ -10,21 +10,21 @@ import (
 )
 
 // redialInterval paces reconnects. It is fixed and it never gives up: a stream
-// that stops retrying loses the rest of the run, which is the whole failure this
-// sender exists to prevent. A longer wait would only make the gap longer.
+// that stops retrying loses the rest of the run.
 const redialInterval = time.Second
 
-// durableSender drains a spool onto a connection it owns, and replaces that
-// connection whenever it breaks. It is the only writer, so what the server
-// receives is what the spool holds, in the order it was appended.
+// durableSender drains a queue onto a connection it owns and replaces that
+// connection when it breaks. It is the only writer, so what the server receives
+// is what was produced, in that order.
 type durableSender struct {
-	spool *spool
+	queue *queue
 	dial  func() (*websocket.Conn, protocol.ServerHello, error)
 
-	// sent is how far into the spool the server is known to hold, in record
-	// bytes. It is what a fresh connection's BytesStored is compared against.
-	sent int64
-	done chan struct{}
+	// stored is what the server holds, in the record framing its file uses. A
+	// reconnect reads the same number off the new connection, which is how a
+	// frame that landed is told from one that did not.
+	stored int64
+	done   chan struct{}
 
 	conn     *websocket.Conn
 	pingDone chan struct{}
@@ -44,51 +44,53 @@ func (d *durableSender) drop() {
 	}
 }
 
-func newDurableSender(sp *spool, dial func() (*websocket.Conn, protocol.ServerHello, error)) *durableSender {
-	return &durableSender{spool: sp, dial: dial, done: make(chan struct{}), tokenC: make(chan string, 1)}
+func newDurableSender(q *queue, dial func() (*websocket.Conn, protocol.ServerHello, error)) *durableSender {
+	return &durableSender{queue: q, dial: dial, done: make(chan struct{}), tokenC: make(chan string, 1)}
 }
 
-// run drains the spool until it is closed and empty, then returns. It is the
-// only place that blocks on the network, and by the time it is waited on the
-// command has already exited.
+// run drains the queue until it is closed and empty. It is the only place that
+// blocks on the network, and the command has exited before anything waits on it.
 func (d *durableSender) run() {
 	defer close(d.done)
 
-	offset := int64(0)
 	for {
-		if d.conn == nil {
-			if !d.connect(&offset) {
-				return
-			}
-		}
-
-		frame, next, ok := d.spool.next(offset)
+		frame, ok := d.queue.Head()
 		if !ok {
 			d.finish()
 			return
 		}
-
+		if d.conn == nil {
+			d.connect()
+		}
 		if err := d.conn.WriteMessage(websocket.BinaryMessage, frame); err != nil {
-			// The frame is still in the spool and the offset has not moved, so the
-			// reconnect resends exactly what the server did not store.
+			// The frame stays at the head, so the reconnect decides whether the server
+			// got it and sends it again if not.
 			fmt.Fprintf(os.Stderr, "log-streamer: the stream dropped, reconnecting: %v\n", err)
 			d.drop()
 			continue
 		}
-		offset = next
-		d.sent = next
-		d.spool.advance(next)
+		d.stored += recordLen(frame)
+		d.queue.Pop()
 	}
 }
 
-// connect dials until it succeeds, then lines the spool position up with what
-// the server already holds. Returns false only when the spool is finished and
-// there is nothing left worth connecting for.
-func (d *durableSender) connect(offset *int64) bool {
+// recordLen is what a frame occupies once stored, header included: the units the
+// server counts in.
+func recordLen(frame []byte) int64 {
+	n, v := int64(1), uint64(len(frame))
+	for v >= 0x80 {
+		v >>= 7
+		n++
+	}
+	return n + int64(len(frame))
+}
+
+// connect dials until it succeeds, then reconciles against what the server
+// already holds. A frame this sender wrote that the server does not have stays
+// at the head and goes again; one it does have is dropped, so a reconnect never
+// writes the same frame twice.
+func (d *durableSender) connect() {
 	for {
-		if d.spool.pending() == 0 && d.spool.isClosed() {
-			return false
-		}
 		conn, hello, err := d.dial()
 		if err != nil {
 			time.Sleep(redialInterval)
@@ -106,20 +108,15 @@ func (d *durableSender) connect(offset *int64) bool {
 			default:
 			}
 		}
-		// The server's own count decides where to resume. Trusting the client's
-		// idea instead is what turns a dropped frame into a silent hole, or a
-		// retried one into a duplicate.
-		if hello.BytesStored < *offset {
-			*offset = hello.BytesStored
-			d.spool.advance(hello.BytesStored)
+		if head, ok := d.queue.Head(); ok && hello.BytesStored >= d.stored+recordLen(head) {
+			d.queue.Pop()
 		}
-		return true
+		d.stored = hello.BytesStored
+		return
 	}
 }
 
-// finish closes the stream and waits for the server to say what it stored. A
-// mismatch is reported rather than swallowed: it is the one signal that says
-// the log is not what the run produced.
+// finish closes the stream and waits for the server to say what it stored.
 func (d *durableSender) finish() {
 	if d.conn == nil {
 		return
@@ -128,13 +125,13 @@ func (d *durableSender) finish() {
 	d.drop()
 }
 
-// sendFrame encodes a frame and hands it to the spool. It never touches the
-// network, so it never blocks the reader that calls it.
+// sendFrame encodes a frame and queues it. It never touches the network.
 func (d *durableSender) sendFrame(stream protocol.StreamID, ts time.Time, payload []byte) error {
-	return d.spool.Append(protocol.EncodeWire(stream, ts, payload))
+	d.queue.Push(protocol.EncodeWire(stream, ts, payload))
+	return nil
 }
 
-// wait blocks until the spool is drained onto the wire. This is the tail
+// wait blocks until the queue is drained onto the wire. This is the tail
 // guarantee, and it runs after the child has exited.
 func (d *durableSender) wait() { <-d.done }
 
