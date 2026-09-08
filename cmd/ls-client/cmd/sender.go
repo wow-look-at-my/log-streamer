@@ -22,7 +22,7 @@ type durableSender struct {
 
 	// stored is what the server holds, in the record framing its file uses. A
 	// reconnect reads the same number off the new connection, which is how a
-	// frame that landed is told from one that did not.
+	// frame that landed is told from a frame that did not.
 	stored int64
 	done   chan struct{}
 
@@ -94,7 +94,7 @@ func (d *durableSender) run() {
 	}
 }
 
-// recordLen is what a frame occupies once stored, header included: the units the
+// recordLen is what a frame occupies when stored, header included: the units the
 // server counts in.
 func recordLen(frame []byte) int64 {
 	n, v := int64(1), uint64(len(frame))
@@ -107,8 +107,8 @@ func recordLen(frame []byte) int64 {
 
 // connect dials until it succeeds, then reconciles against what the server
 // already holds. A frame this sender wrote that the server does not have stays
-// at the head and goes again; one it does have is dropped, so a reconnect never
-// writes the same frame twice.
+// at the head and goes again; a frame it does have is dropped, so a reconnect never
+// repeats it.
 // It reports false when the stream was retired while it was still dialling.
 func (d *durableSender) connect() bool {
 	for {
@@ -128,7 +128,7 @@ func (d *durableSender) connect() bool {
 		}
 		d.conn = conn
 		// A quiet command still has to hold the connection open: the server drops an
-		// idle one, and every drop costs a reconnect the run did not need.
+		// idle connection, and every drop costs a reconnect the run did not need.
 		d.pingDone = make(chan struct{})
 		startPinger(conn, d.pingDone)
 		if d.token == "" {
@@ -174,7 +174,7 @@ func (d *durableSender) wait() {
 	<-d.done
 }
 
-// awaitToken gives the caller the stream's name as soon as the first connection
+// awaitToken gives the caller the stream name as soon as a connection
 // reports it.
 func (d *durableSender) awaitToken() string {
 	select {

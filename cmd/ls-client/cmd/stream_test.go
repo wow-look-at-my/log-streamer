@@ -51,8 +51,8 @@ func TestPumpKeepsTeeingAfterTheStreamDies(t *testing.T) {
 	require.Equal(t, 1, calls, "a retired stream must not be retried per chunk")
 }
 
-// The same, with the reader handing over one line at a time: the failure lands mid-stream rather
-// than on the first frame, which is what a reset socket does to a long step.
+// The same, with the reader handing over a line per read: the failure lands mid-stream rather
+// than on the opening frame, which is what a reset socket does to a long step.
 func TestPumpKeepsTeeingWhenTheStreamDiesPartWay(t *testing.T) {
 	lines := []string{"one\n", "two\n", "three\n", "four\n"}
 	var local bytes.Buffer
@@ -72,7 +72,7 @@ func TestPumpKeepsTeeingWhenTheStreamDiesPartWay(t *testing.T) {
 	require.Equal(t, 2, sent, "sending stops at the first failure and never resumes")
 }
 
-// lineReader hands back one line per Read, so a pump sends one frame per line.
+// lineReader hands back a line per Read, so a pump sends a frame per line.
 type lineReader struct {
 	lines []string
 	at    int

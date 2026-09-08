@@ -121,8 +121,8 @@ func (s *Store) OpenWriter(tok string) (*Writer, error) {
 	if err != nil {
 		return nil, err
 	}
-	// A reconnecting client opens a second writer on a stream that already has
-	// bytes. Starting the count at zero hands it the whole per-stream cap again,
+	// A reconnecting client opens another writer on a stream that already has
+	// bytes. Starting the count fresh hands it the whole per-stream cap again,
 	// so a stream that reconnects often has no cap at all. The file size counts
 	// the record headers too, which errs toward the cap and never past it.
 	w := &Writer{store: s, tok: tok, f: f}

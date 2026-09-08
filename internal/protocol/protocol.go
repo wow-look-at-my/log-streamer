@@ -16,7 +16,7 @@ type StreamMessage struct {
 // BytesStored is what the server already holds for this token, measured in the
 // same record framing its file uses. A client that lost its connection resumes
 // from exactly there: everything before it is stored and everything after it is
-// not, so a reconnect neither drops a frame nor sends one twice.
+// not, so a reconnect neither drops a frame nor repeats it.
 type ServerHello struct {
 	Token       string `json:"token"`
 	BytesStored int64  `json:"bytes_stored,omitempty"`

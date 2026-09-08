@@ -29,7 +29,7 @@ type readResult struct {
 // after it returns.
 //
 // send hands the frame to the spool and returns; it does not reach the network,
-// so a stalled socket cannot slow the reader and a dropped one cannot truncate
+// so a stalled socket cannot slow the reader and a dropped socket cannot truncate
 // it. Only a disk failure stops this pump.
 func pump(r io.Reader, stream protocol.StreamID, local io.Writer, send func(protocol.StreamID, time.Time, []byte) error) error {
 	reads := make(chan readResult)

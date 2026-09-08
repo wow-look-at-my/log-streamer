@@ -41,7 +41,7 @@ func (q *queue) Close() {
 
 // Head blocks until a frame is waiting and returns it without removing it. A
 // retry after a dropped connection therefore sends the same frame again. ok is
-// false only once the queue is closed and empty.
+// false when the queue is closed and empty.
 func (q *queue) Head() (frame []byte, ok bool) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
@@ -54,7 +54,7 @@ func (q *queue) Head() (frame []byte, ok bool) {
 	return q.frames[0], true
 }
 
-// Pop drops the head, which the sender does once the server holds it.
+// Pop drops the head, which the sender does after the server holds it.
 func (q *queue) Pop() {
 	q.mu.Lock()
 	if len(q.frames) > 0 {
