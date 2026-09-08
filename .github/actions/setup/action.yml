@@ -3,22 +3,14 @@ description: 'Install the client and point the job at a stream, so every run ste
 
 inputs:
   server:
-    description: 'log-streamer server URL (ws:// or wss://). Defaults to wss://logs.pazer.io.'
+    description: 'log-streamer server URL (ws:// or wss://).'
     required: false
-    default: ''
+    default: 'wss://logs.pazer.io'
   stream-key:
     description: 'Shared key the stream token derives from. Whoever watches needs the same key.'
     required: true
   name:
     description: 'Extra context separating streams inside a job. Matrix legs MUST set this, or every leg writes to the same stream.'
-    required: false
-    default: ''
-  client-project:
-    description: 'buildhost project holding the client binary'
-    required: false
-    default: 'log-streamer/ls-client'
-  client-version:
-    description: 'Client release to install (e.g. v3). Omit for the newest.'
     required: false
     default: ''
 
