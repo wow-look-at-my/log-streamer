@@ -55,10 +55,8 @@ func pump(r io.Reader, stream protocol.StreamID, local io.Writer, send func(prot
 	defer timer.Stop()
 	armed := false
 
-	// A dead socket retires the stream and costs nothing else. The local tee is the copy of
-	// record: a CI step whose tail followed the socket down loses whatever it was measuring, and
-	// the reader is not the thing that failed. Retiring is once, so a long step does not pay a
-	// failed send per chunk.
+	// The local tee is the copy of record, so a dead socket retires the stream and costs the
+	// reader nothing. Retiring is not repeated, or a long step pays a failed send per chunk.
 	retired := false
 
 	flush := func(upTo int) error {

@@ -30,7 +30,13 @@ type durableSender struct {
 	pingDone chan struct{}
 	token    string
 	tokenC   chan string
+
+	// quit retires the stream, because redialling never gives up on its own.
+	quit chan struct{}
 }
+
+// drainGrace bounds the tail wait: the stream is a copy and may never cost the command.
+const drainGrace = 5 * time.Second
 
 // drop closes the current connection and its pinger, so the next dial starts clean.
 func (d *durableSender) drop() {
@@ -45,7 +51,13 @@ func (d *durableSender) drop() {
 }
 
 func newDurableSender(q *queue, dial func() (*websocket.Conn, protocol.ServerHello, error)) *durableSender {
-	return &durableSender{queue: q, dial: dial, done: make(chan struct{}), tokenC: make(chan string, 1)}
+	return &durableSender{
+		queue:  q,
+		dial:   dial,
+		done:   make(chan struct{}),
+		tokenC: make(chan string, 1),
+		quit:   make(chan struct{}),
+	}
 }
 
 // run drains the queue until it is closed and empty. It is the only place that
@@ -54,14 +66,22 @@ func (d *durableSender) run() {
 	defer close(d.done)
 
 	for {
+		select {
+		case <-d.quit:
+			return
+		default:
+		}
 		frame, ok := d.queue.Head()
 		if !ok {
 			d.finish()
 			return
 		}
-		if d.conn == nil {
-			d.connect()
+		if d.conn == nil && !d.connect() {
+			return
 		}
+		// An open but dead socket blocks a write forever, and retirement only reaches a
+		// sender that returns to this loop.
+		_ = d.conn.SetWriteDeadline(time.Now().Add(redialInterval))
 		if err := d.conn.WriteMessage(websocket.BinaryMessage, frame); err != nil {
 			// The frame stays at the head, so the reconnect decides whether the server
 			// got it and sends it again if not.
@@ -89,11 +109,21 @@ func recordLen(frame []byte) int64 {
 // already holds. A frame this sender wrote that the server does not have stays
 // at the head and goes again; one it does have is dropped, so a reconnect never
 // writes the same frame twice.
-func (d *durableSender) connect() {
+// It reports false when the stream was retired while it was still dialling.
+func (d *durableSender) connect() bool {
 	for {
+		select {
+		case <-d.quit:
+			return false
+		default:
+		}
 		conn, hello, err := d.dial()
 		if err != nil {
-			time.Sleep(redialInterval)
+			select {
+			case <-time.After(redialInterval):
+			case <-d.quit:
+				return false
+			}
 			continue
 		}
 		d.conn = conn
@@ -112,7 +142,7 @@ func (d *durableSender) connect() {
 			d.queue.Pop()
 		}
 		d.stored = hello.BytesStored
-		return
+		return true
 	}
 }
 
@@ -131,9 +161,18 @@ func (d *durableSender) sendFrame(stream protocol.StreamID, ts time.Time, payloa
 	return nil
 }
 
-// wait blocks until the queue is drained onto the wire. This is the tail
-// guarantee, and it runs after the child has exited.
-func (d *durableSender) wait() { <-d.done }
+// wait gives the queue drainGrace to reach the wire, then retires the stream and returns. It runs
+// after the child has exited, so an absent server costs a stream's tail and never the command.
+func (d *durableSender) wait() {
+	select {
+	case <-d.done:
+		return
+	case <-time.After(drainGrace):
+	}
+	fmt.Fprintf(os.Stderr, "log-streamer: the stream did not drain in %s, giving up on its tail\n", drainGrace)
+	close(d.quit)
+	<-d.done
+}
 
 // awaitToken gives the caller the stream's name as soon as the first connection
 // reports it.
