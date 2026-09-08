@@ -152,6 +152,8 @@ Start this before or during the run. It waits for the stream to appear. Then it 
 
 ### Buffering, the thing that will bite you
 
+The client sends on line boundaries. A partial line goes anyway after 200ms, so a prompt or a progress line reaches a watcher without its newline.
+
 A program that writes to a pipe rather than a terminal usually switches to block buffering. Its output can then sit in that program's own buffer before log-streamer sees any of it. This is the program's behaviour, not the stream's. Use `stdbuf -oL` when a build goes quiet and then emits everything at once. Many tools also have an unbuffered flag of their own.
 
 ## Configuration

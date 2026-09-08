@@ -98,6 +98,42 @@ func TestShellStreamsAStepAndFetchSplitsItBack(t *testing.T) {
 	require.NotContains(t, buf.String(), "hello from the step")
 }
 
+// Each step opens its own connection, and ordering holds within a connection
+// rather than across separate ones. The client waits for the server, so a
+// step's tail cannot land after the next step's output.
+func TestStepsLandInTheOrderTheyRan(t *testing.T) {
+	lockGlobalState(t)
+	captureStdout(t)
+	ts := startClientTestServer(t)
+	pointClientAt(t, ts)
+
+	t.Setenv("LOG_STREAMER_SHELL", "")
+	t.Setenv("LOG_STREAMER_STEP_NAME", "")
+	t.Setenv("GITHUB_JOB", "test")
+
+	tok, err := token.Generate()
+	require.NoError(t, err)
+	t.Setenv("LOG_STREAMER_TOKEN", tok)
+
+	for _, name := range []string{"__run", "__run_2", "__run_3"} {
+		t.Setenv("GITHUB_ACTION", name)
+		rootCmd.SetArgs([]string{"shell", writeScript(t, "echo "+name+"\n")})
+		require.NoError(t, rootCmd.Execute())
+	}
+
+	resp, err := fetchSince(tok, 0)
+	require.NoError(t, err)
+	steps, preamble := groupSteps(resp.Lines)
+
+	require.Empty(t, preamble, "no output escaped its step")
+	require.Len(t, steps, 3)
+	for i, name := range []string{"__run", "__run_2", "__run_3"} {
+		require.Equal(t, name, steps[i].Start.Step)
+		require.Equal(t, []string{name}, linesOf(steps[i]),
+			"a step holds its own output only")
+	}
+}
+
 // --raw is what a caller pipes elsewhere, so structure must stay out of it.
 func TestRendererKeepsMarkersOutOfRawOutput(t *testing.T) {
 	at := jobLog(t)

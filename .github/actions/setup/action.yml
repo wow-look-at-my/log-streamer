@@ -13,10 +13,14 @@ inputs:
     description: 'Extra context separating streams inside a job. Matrix legs MUST set this, or every leg writes to the same stream.'
     required: false
     default: ''
-  client-url:
-    description: 'Where to fetch the client binary'
+  client-project:
+    description: 'buildhost project holding the client binary'
     required: false
-    default: 'https://dl.pazer.build/log-streamer/ls-client'
+    default: 'log-streamer/ls-client'
+  client-version:
+    description: 'Client release to install (e.g. v3). Omit for the newest.'
+    required: false
+    default: ''
 
 outputs:
   token:
@@ -26,27 +30,22 @@ outputs:
 runs:
   using: composite
   steps:
-    # A static binary staged in the runner temp needs no package manager and no credential.
+    # buildhost resolves the runner's own os and arch, and retries a registry blip.
     - name: Install the log-streamer client
+      id: client
+      uses: wow-look-at-my/buildhost/.github/actions/buildhost-download@master
+      with:
+        project: ${{ inputs.client-project }}
+        version: ${{ inputs.client-version }}
+
+    # The job names ls-client as its shell, and the runner resolves that name on PATH.
+    - name: Put the client on PATH
       shell: bash
       env:
-        CLIENT_URL: ${{ inputs.client-url }}
+        CLIENT_PATH: ${{ steps.client.outputs.path }}
       run: |
         set -euo pipefail
-        case "${RUNNER_OS}" in
-          Linux) os=linux ;;
-          macOS) os=darwin ;;
-          Windows) os=windows ;;
-        esac
-        case "${RUNNER_ARCH}" in
-          X64) arch=amd64 ;;
-          ARM64) arch=arm64 ;;
-        esac
-        curl -fL --compressed --connect-timeout 20 --max-time 120 \
-          -o "${RUNNER_TEMP}/ls-client" "${CLIENT_URL}?os=${os}&arch=${arch}"
-        chmod +x "${RUNNER_TEMP}/ls-client"
-        # The job names ls-client as its shell and the runner resolves that name on PATH.
-        echo "${RUNNER_TEMP}" >> "${GITHUB_PATH}"
+        dirname "${CLIENT_PATH}" >> "${GITHUB_PATH}"
 
     # Derived, never announced: a minted token's only channel back is this withheld log.
     - name: Derive the stream token

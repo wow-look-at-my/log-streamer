@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -87,8 +88,7 @@ func streamExec(args []string, step *protocol.Marker) error {
 		sendMarker(sender, end)
 	}
 
-	conn.WriteMessage(websocket.CloseMessage,
-		websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
+	closeStream(conn)
 
 	if exitErr != nil {
 		if _, ok := exitErr.(*exec.ExitError); ok {
@@ -98,6 +98,35 @@ func streamExec(args []string, step *protocol.Marker) error {
 		return exitErr
 	}
 	return nil
+}
+
+// ackTimeout bounds the wait for the server to confirm what it stored.
+const ackTimeout = 10 * time.Second
+
+// closeStream ends the stream and waits for the server to answer. Ordering
+// holds within a connection and not between separate ones, and each step of a
+// job opens its own, so a step that exits early lets its tail land after the
+// next step's output. The server answers a close only after its reader has
+// drained, which is the proof this waits for. The ack says the same thing, and
+// the echoed close usually arrives ahead of it.
+func closeStream(conn *websocket.Conn) {
+	conn.WriteMessage(websocket.CloseMessage,
+		websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
+
+	conn.SetReadDeadline(time.Now().Add(ackTimeout))
+	for {
+		_, msg, err := conn.ReadMessage()
+		if err != nil {
+			if !websocket.IsCloseError(err, websocket.CloseNormalClosure, websocket.CloseGoingAway) {
+				fmt.Fprintf(os.Stderr, "log-streamer: the server did not confirm the stream: %v\n", err)
+			}
+			return
+		}
+		var ack protocol.ServerAck
+		if json.Unmarshal(msg, &ack) == nil {
+			return
+		}
+	}
 }
 
 // sendMarker reports a failure to stderr and continues. A lost boundary costs

@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -49,6 +50,56 @@ func TestPumpChunksLargeInput(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, input, sent)
 	require.GreaterOrEqual(t, frames, 4)
+}
+
+// A frame ends on a line boundary, so a reader is never handed half a line
+// while the rest of it is available.
+func TestPumpSendsOnLineBoundaries(t *testing.T) {
+	// Both lines arrive in a single read, and belong in a single frame.
+	var frames [][]byte
+	err := pump(bytes.NewReader([]byte("first\nsecond\ntrailing")), protocol.StreamStdout, nil,
+		func(_ protocol.StreamID, _ time.Time, payload []byte) error {
+			frames = append(frames, append([]byte(nil), payload...))
+			return nil
+		})
+
+	require.NoError(t, err)
+	require.Equal(t, [][]byte{[]byte("first\nsecond\n"), []byte("trailing")}, frames,
+		"whole lines go together, and the unterminated tail follows at EOF")
+}
+
+// A prompt or a progress line has no newline, and a watcher still needs it.
+func TestPumpFlushesAPartialLineOnTheTimeout(t *testing.T) {
+	pr, pw := io.Pipe()
+	defer pw.Close()
+
+	type frame struct {
+		at   time.Time
+		data string
+	}
+	got := make(chan frame, 4)
+	go func() {
+		_ = pump(pr, protocol.StreamStdout, nil,
+			func(_ protocol.StreamID, ts time.Time, payload []byte) error {
+				got <- frame{at: ts, data: string(payload)}
+				return nil
+			})
+	}()
+
+	started := time.Now()
+	_, err := pw.Write([]byte("no newline here"))
+	require.NoError(t, err)
+
+	select {
+	case f := <-got:
+		require.Equal(t, "no newline here", f.data)
+		require.GreaterOrEqual(t, time.Since(started), flushInterval,
+			"a partial line waits for its newline until the timeout")
+		require.WithinDuration(t, started, f.at, flushInterval,
+			"a frame is stamped when the bytes were read, not when they were sent")
+	case <-time.After(5 * time.Second):
+		t.Fatal("a partial line never reached the server")
+	}
 }
 
 func TestSanitizeControl(t *testing.T) {
