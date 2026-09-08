@@ -12,8 +12,7 @@ import (
 	"github.com/wow-look-at-my/log-streamer/internal/token"
 )
 
-// defaultServerURL is the org's server, so an ordinary client needs no flag
-// and no environment variable.
+// The org's server, so an ordinary client needs no flag and no env var.
 const defaultServerURL = "wss://logs.pazer.io"
 
 var (
