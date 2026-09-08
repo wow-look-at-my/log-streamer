@@ -148,9 +148,22 @@ func getStreamGroup() string {
 	return group
 }
 
-// getStreamLabel names this stream in its group's listing.
+// getStreamLabel names this stream in its group's listing. The job alone reads
+// the same for every matrix leg, so the name that separates the streams has to
+// separate the labels too.
 func getStreamLabel() string {
-	return firstEnv("LOG_STREAMER_LABEL", "GITHUB_JOB")
+	if label := os.Getenv("LOG_STREAMER_LABEL"); label != "" {
+		return label
+	}
+	job := os.Getenv("GITHUB_JOB")
+	name := firstEnvOr(deriveName, "LOG_STREAMER_NAME")
+	switch {
+	case job != "" && name != "":
+		return job + " (" + name + ")"
+	case job != "":
+		return job
+	}
+	return name
 }
 
 // addStreamTokenFlag registers --token and --group on a command that opens a

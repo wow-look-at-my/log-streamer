@@ -116,6 +116,61 @@ func TestStreamURLRefusesAMalformedGroup(t *testing.T) {
 	require.ErrorContains(t, err, "group must be 64 hex characters")
 }
 
+// A listing that calls both legs "test" is no better than no listing, and the
+// job name is all Actions gives a leg.
+func TestALegLabelsItselfApartFromItsSiblings(t *testing.T) {
+	lockGlobalState(t)
+	clearDerivationEnv(t)
+	t.Setenv("GITHUB_JOB", "test")
+
+	t.Setenv("LOG_STREAMER_NAME", "ubuntu-latest")
+	require.Equal(t, "test (ubuntu-latest)", getStreamLabel())
+
+	t.Setenv("LOG_STREAMER_NAME", "macos-14")
+	require.Equal(t, "test (macos-14)", getStreamLabel())
+
+	// A job with no legs keeps its own name, and a caller may override either.
+	t.Setenv("LOG_STREAMER_NAME", "")
+	require.Equal(t, "test", getStreamLabel())
+	t.Setenv("LOG_STREAMER_LABEL", "the deploy")
+	require.Equal(t, "the deploy", getStreamLabel())
+}
+
+// The listing is what a watcher reads, so it must carry the token to fetch
+// and the label that says which leg it belongs to.
+func TestStreamsPrintsTokensAndLabels(t *testing.T) {
+	lockGlobalState(t)
+	clearDerivationEnv(t)
+	ts := startClientTestServer(t)
+	pointClientAt(t, ts)
+
+	t.Setenv("LOG_STREAMER_STREAM_KEY", "shared-key")
+	t.Setenv("GITHUB_REPOSITORY", "owner/repo")
+	t.Setenv("GITHUB_RUN_ID", "12345")
+	t.Setenv("GITHUB_RUN_ATTEMPT", "1")
+	t.Setenv("GITHUB_JOB", "test")
+	t.Setenv("LOG_STREAMER_NAME", "ubuntu-latest")
+
+	tok, group := getStreamToken(), getStreamGroup()
+
+	stdout := captureStdoutText(t)
+	rootCmd.SetArgs([]string{"shell", writeScript(t, "echo hello\n")})
+	require.NoError(t, rootCmd.Execute())
+
+	rootCmd.SetArgs([]string{"streams", group})
+	require.NoError(t, rootCmd.Execute())
+
+	printed := stdout()
+	require.Contains(t, printed, tok)
+	require.Contains(t, printed, "test (ubuntu-latest)")
+
+	// A group nobody wrote to reads as empty rather than as an error.
+	empty, err := token.Generate()
+	require.NoError(t, err)
+	_, err = fetchGroup(empty)
+	require.ErrorIs(t, err, errGroupNotFound)
+}
+
 func TestHumanBytes(t *testing.T) {
 	require.Equal(t, "0B", humanBytes(0))
 	require.Equal(t, "512B", humanBytes(512))
@@ -141,8 +196,8 @@ func TestStreamsListsTheLegsOfARun(t *testing.T) {
 
 	group := getStreamGroup()
 	for _, leg := range []string{"ubuntu-latest", "macos-14"} {
+		// Only what the runner itself would set: the leg labels itself.
 		t.Setenv("LOG_STREAMER_NAME", leg)
-		t.Setenv("LOG_STREAMER_LABEL", "test ("+leg+")")
 		rootCmd.SetArgs([]string{"shell", writeScript(t, "echo built on "+leg+"\n")})
 		require.NoError(t, rootCmd.Execute())
 	}
