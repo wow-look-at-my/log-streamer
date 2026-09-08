@@ -14,11 +14,6 @@ inputs:
     required: false
     default: ''
 
-outputs:
-  token:
-    description: 'The derived stream token, which a holder of the key computes without reading this log'
-    value: ${{ steps.derive.outputs.token }}
-
 runs:
   using: composite
   steps:
@@ -29,19 +24,16 @@ runs:
       with:
         project: log-streamer/ls-client
 
-    # Derived, never announced: a minted token's only channel back is this withheld log.
+    # The client derives its own token from the key, so no log or output holds one.
     - name: Point the job's steps at the stream
-      id: derive
       shell: bash
       env:
-        LOG_STREAMER_STREAM_KEY: ${{ inputs.stream-key }}
+        KEY: ${{ inputs.stream-key }}
         STREAM_NAME: ${{ inputs.name }}
         SERVER: ${{ inputs.server }}
       run: |
         set -euo pipefail
         dirname "${{ steps.client.outputs.path }}" >> "${GITHUB_PATH}"
-        tok="$("${{ steps.client.outputs.path }}" token derive --name "${STREAM_NAME}")"
-        echo "::add-mask::${tok}"
-        echo "token=${tok}" >> "${GITHUB_OUTPUT}"
-        echo "LOG_STREAMER_TOKEN=${tok}" >> "${GITHUB_ENV}"
+        echo "LOG_STREAMER_STREAM_KEY=${KEY}" >> "${GITHUB_ENV}"
+        echo "LOG_STREAMER_NAME=${STREAM_NAME}" >> "${GITHUB_ENV}"
         echo "LOG_STREAMER_SERVER=${SERVER}" >> "${GITHUB_ENV}"

@@ -105,6 +105,7 @@ func New(cfg Config) (*Server, error) {
 	s.mux.HandleFunc("GET /api/stream", s.handleStream)
 	s.mux.HandleFunc("GET /api/logs/{token}", s.handleFetch)
 	s.mux.HandleFunc("DELETE /api/logs/{token}", s.handleDelete)
+	s.mux.HandleFunc("GET /api/groups/{group}", s.handleGroup)
 
 	return s, nil
 }

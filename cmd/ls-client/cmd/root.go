@@ -18,6 +18,7 @@ const defaultServerURL = "wss://logs.pazer.io"
 var (
 	serverURL   string
 	streamToken string
+	streamGroup string
 )
 
 var rootCmd = &cobra.Command{
@@ -28,11 +29,21 @@ var rootCmd = &cobra.Command{
 func init() {
 	rootCmd.PersistentFlags().StringVar(&serverURL, "server", "",
 		"server URL (overrides LOG_STREAMER_SERVER env; default "+defaultServerURL+")")
+
+	// Every command that names a stream derives it, so nothing has to compute
+	// the value beforehand and carry it around.
+	rootCmd.PersistentFlags().StringVar(&deriveKey, "key", "",
+		"shared derivation key (overrides LOG_STREAMER_STREAM_KEY env)")
+	rootCmd.PersistentFlags().StringVar(&deriveContext, "context", "",
+		"context to derive from (default: repository/run-id/run-attempt/job from the GitHub Actions env)")
+	rootCmd.PersistentFlags().StringVar(&deriveName, "name", "",
+		"extra context separating streams within a job, such as a matrix leg (overrides LOG_STREAMER_NAME env)")
 }
 
 // streamURL builds the stream endpoint, naming the stream when the caller
 // chose a token. A caller that names its own stream can read the log back
-// before the writer finishes, which is the point in CI.
+// before the writer finishes, which is the point in CI. A group indexes the
+// stream, so a watcher holding the key can list it without knowing its name.
 func streamURL() (string, error) {
 	base := getWSURL() + "/api/stream"
 	tok := getStreamToken()
@@ -42,7 +53,18 @@ func streamURL() (string, error) {
 	if !token.Validate(tok) {
 		return "", fmt.Errorf("token must be 64 hex characters, got %q", tok)
 	}
-	return base + "?token=" + url.QueryEscape(tok), nil
+
+	q := url.Values{"token": {tok}}
+	if group := getStreamGroup(); group != "" {
+		if !token.Validate(group) {
+			return "", fmt.Errorf("group must be 64 hex characters, got %q", group)
+		}
+		q.Set("group", group)
+		if label := getStreamLabel(); label != "" {
+			q.Set("label", label)
+		}
+	}
+	return base + "?" + q.Encode(), nil
 }
 
 // dialStream opens the stream socket. A plaintext dial that a server answers
@@ -70,17 +92,74 @@ func announceToken(tok string) {
 	}
 }
 
+// getStreamToken names the stream to write into. A key is enough on its own:
+// the client derives the same token the watcher does, so nothing has to
+// compute it beforehand and no workflow ever holds the value.
 func getStreamToken() string {
 	if streamToken != "" {
 		return streamToken
 	}
-	return os.Getenv("LOG_STREAMER_TOKEN")
+	if tok := os.Getenv("LOG_STREAMER_TOKEN"); tok != "" {
+		return tok
+	}
+	tok, err := token.Derive(derivationKey(), derivedContext())
+	if err != nil {
+		return ""
+	}
+	return tok
 }
 
-// addStreamTokenFlag registers --token on a command that opens a stream.
+// tokenArgOrDerived reads the token a command works on, preferring what the
+// caller named over what the key derives.
+func tokenArgOrDerived(args []string) (string, error) {
+	if len(args) > 0 {
+		return args[0], nil
+	}
+	if tok := getStreamToken(); tok != "" {
+		return tok, nil
+	}
+	return "", fmt.Errorf("no token: pass one, or pass --key (or set LOG_STREAMER_STREAM_KEY) to derive it")
+}
+
+// groupArgOrDerived reads the group a listing works on.
+func groupArgOrDerived(args []string) (string, error) {
+	if len(args) > 0 {
+		return args[0], nil
+	}
+	if group := getStreamGroup(); group != "" {
+		return group, nil
+	}
+	return "", fmt.Errorf("no group: pass one, or pass --key (or set LOG_STREAMER_STREAM_KEY) to derive it")
+}
+
+// getStreamGroup names the index this stream registers in, derived from the
+// same key so a watcher lists the run without knowing any leg's name.
+func getStreamGroup() string {
+	if streamGroup != "" {
+		return streamGroup
+	}
+	if group := os.Getenv("LOG_STREAMER_GROUP"); group != "" {
+		return group
+	}
+	group, err := token.DeriveGroup(derivationKey(), derivedGroupContext())
+	if err != nil {
+		return ""
+	}
+	return group
+}
+
+// getStreamLabel names this stream in its group's listing.
+func getStreamLabel() string {
+	return firstEnv("LOG_STREAMER_LABEL", "GITHUB_JOB")
+}
+
+// addStreamTokenFlag registers --token and --group on a command that opens a
+// stream.
 func addStreamTokenFlag(cmd *cobra.Command) {
 	cmd.Flags().StringVar(&streamToken, "token", "",
 		"stream into this 64-hex token instead of a server-generated one (overrides LOG_STREAMER_TOKEN env)")
+	cmd.Flags().StringVar(&streamGroup, "group", "",
+		"index this stream under this 64-hex group token, which `streams` lists (overrides LOG_STREAMER_GROUP env)")
 }
 
 func Execute() {
