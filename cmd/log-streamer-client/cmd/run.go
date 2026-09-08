@@ -30,7 +30,7 @@ func runRun(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
+	conn, err := dialStream(wsURL)
 	if err != nil {
 		return fmt.Errorf("connecting to server: %w", err)
 	}

@@ -2,6 +2,8 @@
 
 Stream command output to a server and retrieve or delete it later using a token.
 
+The client talks to `wss://logs.pazer.io` unless you point it somewhere else with `--server` or `LOG_STREAMER_SERVER`.
+
 The server is intentionally **public / unauthenticated**: anyone who can reach it may open a stream. The 256-bit token is the only credential needed to fetch or delete a stream's logs. Treat it as a secret.
 
 A client may name its own stream with `--token`. That is what makes a live CI build watchable, as described under [Watching a CI build live](#watching-a-ci-build-live). A caller holding a token can therefore append to that stream, as well as read and delete it. The token was always the whole credential. What a caller still cannot do is choose a storage path: every token is validated as 64 hex characters before it names a file.
@@ -49,6 +51,8 @@ docker build -t log-streamer-server .
 docker run -p 8080:8080 -v /data/logs:/data/logs log-streamer-server
 ```
 
+Point the client at your own server with `--server ws://localhost:8080`, or set `LOG_STREAMER_SERVER`.
+
 The server speaks plain HTTP and has no built-in TLS. Terminate TLS in front of it on any untrusted network, behind a reverse proxy, so tokens never travel in the clear. The Docker image runs as an unprivileged user (uid 10001). Make `/data/logs` writable by that uid when you bind-mount a host directory over it.
 
 ## Watching a CI build live
@@ -72,7 +76,6 @@ Matrix legs of a job share `GITHUB_JOB`. Give each leg its own `--name`. Without
 ```yaml
 - uses: wow-look-at-my/log-streamer/.github/actions/stream@master
   with:
-    server: wss://logs.example.com
     stream-key: ${{ secrets.LOG_STREAMER_STREAM_KEY }}
     name: ${{ matrix.os }}      # required only for a matrix job
     run: |
@@ -80,12 +83,11 @@ Matrix legs of a job share `GITHUB_JOB`. Give each leg its own `--name`. Without
       make test
 ```
 
-The action installs the client and derives the token. It then runs your command through the client. Output still reaches the job's own log. The command's exit status is still the step's status. A failing command still fails the build. The action masks the derived token, so the log never shows it.
+Set `server:` only to reach a different server. The action installs the client and derives the token. It then runs your command through the client. Output still reaches the job's own log. The command's exit status is still the step's status. A failing command still fails the build. The action masks the derived token, so the log never shows it.
 
 ### Watching from your machine
 
 ```bash
-export LOG_STREAMER_SERVER=wss://logs.example.com
 export LOG_STREAMER_STREAM_KEY='...'
 
 run_id="$(gh run list --branch my-branch --limit 1 --json databaseId --jq '.[0].databaseId')"
@@ -120,11 +122,13 @@ Byte limits are plain integers (bytes). Durations use Go syntax (`30m`, `24h`, .
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `LOG_STREAMER_SERVER` | `ws://localhost:8080` | Server WebSocket URL |
+| `LOG_STREAMER_SERVER` | `wss://logs.pazer.io` | Server WebSocket URL |
 | `LOG_STREAMER_TOKEN` | (none) | Stream into this token instead of a server-generated one. Used by `run` and `send`. |
 | `LOG_STREAMER_STREAM_KEY` | (none) | Key that `token derive` derives from. |
 
 The `--server`, `--token` and `--key` flags override the matching environment variables.
+
+A server URL may be written as `wss://`, `ws://`, `https://`, `http://`, or a bare host. The client converts it to the scheme each request needs. A bare host becomes `wss://`.
 
 ## Protocol
 

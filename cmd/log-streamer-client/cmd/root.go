@@ -12,6 +12,9 @@ import (
 	"github.com/wow-look-at-my/log-streamer/internal/token"
 )
 
+// The org's server, so an ordinary client needs no flag and no env var.
+const defaultServerURL = "wss://logs.pazer.io"
+
 var (
 	serverURL   string
 	streamToken string
@@ -23,7 +26,8 @@ var rootCmd = &cobra.Command{
 }
 
 func init() {
-	rootCmd.PersistentFlags().StringVar(&serverURL, "server", "", "server URL (overrides LOG_STREAMER_SERVER env)")
+	rootCmd.PersistentFlags().StringVar(&serverURL, "server", "",
+		"server URL (overrides LOG_STREAMER_SERVER env; default "+defaultServerURL+")")
 }
 
 // streamURL builds the stream endpoint, naming the stream when the caller
@@ -39,6 +43,23 @@ func streamURL() (string, error) {
 		return "", fmt.Errorf("token must be 64 hex characters, got %q", tok)
 	}
 	return base + "?token=" + url.QueryEscape(tok), nil
+}
+
+// dialStream opens the stream socket. A plaintext dial that a server answers
+// with a redirect to TLS is retried over wss, because a WebSocket handshake
+// cannot follow a redirect. The retry says so on stderr.
+func dialStream(wsURL string) (*websocket.Conn, error) {
+	conn, resp, err := websocket.DefaultDialer.Dial(wsURL, nil)
+	if err == nil {
+		return conn, nil
+	}
+	if !strings.HasPrefix(wsURL, "ws://") || resp == nil || resp.StatusCode < 300 || resp.StatusCode > 399 {
+		return nil, err
+	}
+	secure := "wss://" + strings.TrimPrefix(wsURL, "ws://")
+	fmt.Fprintf(os.Stderr, "log-streamer: %s redirects to TLS, retrying over wss\n", wsURL)
+	conn, _, err = websocket.DefaultDialer.Dial(secure, nil)
+	return conn, err
 }
 
 // announceToken reports only a minted token. Echoing a caller's own token back
@@ -69,14 +90,31 @@ func Execute() {
 	}
 }
 
-func getWSURL() string {
+// configuredServer is what the caller asked for, in whatever scheme.
+func configuredServer() string {
 	if serverURL != "" {
 		return serverURL
 	}
 	if v := os.Getenv("LOG_STREAMER_SERVER"); v != "" {
 		return v
 	}
-	return "ws://localhost:8080"
+	return defaultServerURL
+}
+
+// getWSURL speaks ws or wss, the only schemes a WebSocket dial accepts. A
+// bare host gets wss, because a public server redirects http to https and
+// the dial fails on the redirect.
+func getWSURL() string {
+	s := configuredServer()
+	switch {
+	case strings.HasPrefix(s, "https://"):
+		return "wss://" + strings.TrimPrefix(s, "https://")
+	case strings.HasPrefix(s, "http://"):
+		return "ws://" + strings.TrimPrefix(s, "http://")
+	case strings.HasPrefix(s, "ws://"), strings.HasPrefix(s, "wss://"):
+		return s
+	}
+	return "wss://" + s
 }
 
 func getHTTPURL() string {

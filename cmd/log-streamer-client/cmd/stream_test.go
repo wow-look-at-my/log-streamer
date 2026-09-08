@@ -2,6 +2,8 @@ package cmd
 
 import (
 	"bytes"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"strings"
 	"testing"
@@ -70,8 +72,8 @@ func TestGetURLs(t *testing.T) {
 
 	serverURL = ""
 	t.Setenv("LOG_STREAMER_SERVER", "")
-	require.Equal(t, "ws://localhost:8080", getWSURL())
-	require.Equal(t, "http://localhost:8080", getHTTPURL())
+	require.Equal(t, "wss://logs.pazer.io", getWSURL())
+	require.Equal(t, "https://logs.pazer.io", getHTTPURL())
 
 	serverURL = "wss://logs.example.com"
 	require.Equal(t, "wss://logs.example.com", getWSURL())
@@ -81,6 +83,40 @@ func TestGetURLs(t *testing.T) {
 	t.Setenv("LOG_STREAMER_SERVER", "ws://from-env:9000")
 	require.Equal(t, "ws://from-env:9000", getWSURL())
 	require.Equal(t, "http://from-env:9000", getHTTPURL())
+}
+
+// A WebSocket handshake cannot follow the redirect a public server answers
+// plaintext with, so the dial retries over wss.
+func TestDialStreamRetriesOverTLSOnRedirect(t *testing.T) {
+	redirects := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "https://example.invalid"+r.URL.Path, http.StatusMovedPermanently)
+	}))
+	defer redirects.Close()
+
+	host := strings.TrimPrefix(redirects.URL, "http://")
+	_, err := dialStream("ws://" + host + "/api/stream")
+
+	// A TLS error can only come from the retry: this listener speaks plaintext.
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "tls")
+}
+
+// A WebSocket dial rejects an http scheme, and a bare host outright.
+func TestGetWSURLNormalizesScheme(t *testing.T) {
+	lockGlobalState(t)
+	orig := serverURL
+	defer func() { serverURL = orig }()
+	t.Setenv("LOG_STREAMER_SERVER", "")
+
+	for in, want := range map[string]string{
+		"https://logs.pazer.io": "wss://logs.pazer.io",
+		"http://localhost:8080": "ws://localhost:8080",
+		"logs.pazer.io":         "wss://logs.pazer.io",
+		"wss://logs.pazer.io":   "wss://logs.pazer.io",
+	} {
+		serverURL = in
+		require.Equal(t, want, getWSURL(), "input %q", in)
+	}
 }
 
 func TestIsTerminal(t *testing.T) {
