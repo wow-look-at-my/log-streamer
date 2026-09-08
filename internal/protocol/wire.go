@@ -14,6 +14,9 @@ const (
 	StreamStdout StreamID = 0
 	StreamStderr StreamID = 1
 	StreamStdin  StreamID = 2
+	// StreamMarker carries structure rather than output: a JSON line per step
+	// boundary, reassembled by the store like any other line.
+	StreamMarker StreamID = 3
 )
 
 func (s StreamID) String() string {
@@ -24,6 +27,8 @@ func (s StreamID) String() string {
 		return "stderr"
 	case StreamStdin:
 		return "stdin"
+	case StreamMarker:
+		return "marker"
 	default:
 		return fmt.Sprintf("stream%d", byte(s))
 	}

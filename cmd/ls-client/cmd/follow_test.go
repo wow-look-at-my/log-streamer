@@ -111,7 +111,7 @@ func followUntil(t *testing.T, step func(printed string) bool) string {
 	watching := make(chan struct{})
 	go func() {
 		defer close(watching)
-		_ = followStream(ctx, out, "sometoken", false)
+		_ = followStream(ctx, out, "sometoken", &renderer{out: out})
 	}()
 
 	require.Eventually(t, func() bool { return step(buf.String()) },

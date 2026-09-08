@@ -42,6 +42,17 @@ func runSend(cmd *cobra.Command, args []string) error {
 	defer close(pingDone)
 
 	sender := &wsSender{conn: conn}
+
+	// Piped output gets its own section when the runner's env names a step.
+	if step := stepFromEnv(); step != nil {
+		step.Event = protocol.EventStepStart
+		sendMarker(sender, *step)
+		defer func() {
+			done := 0
+			step.Event, step.Exit = protocol.EventStepEnd, &done
+			sendMarker(sender, *step)
+		}()
+	}
 	pumpErr := pump(os.Stdin, protocol.StreamStdin, os.Stdout, sender.sendFrame)
 
 	conn.WriteMessage(websocket.CloseMessage,
