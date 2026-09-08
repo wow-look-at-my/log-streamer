@@ -20,10 +20,14 @@ inputs:
     description: 'Directory to run the command in'
     required: false
     default: '.'
-  client-url:
-    description: 'Where to fetch the client binary'
+  client-project:
+    description: 'buildhost project holding the client binary'
     required: false
-    default: 'https://dl.pazer.build/log-streamer/ls-client'
+    default: 'log-streamer/ls-client'
+  client-version:
+    description: 'Client release to install (e.g. v3). Omit for the newest.'
+    required: false
+    default: ''
 
 outputs:
   token:
@@ -33,25 +37,13 @@ outputs:
 runs:
   using: composite
   steps:
-    # A static binary staged in the runner temp needs no package manager and no credential.
+    # buildhost resolves the runner's own os and arch, and retries a registry blip.
     - name: Install the log-streamer client
-      shell: bash
-      env:
-        CLIENT_URL: ${{ inputs.client-url }}
-      run: |
-        set -euo pipefail
-        case "${RUNNER_OS}" in
-          Linux) os=linux ;;
-          macOS) os=darwin ;;
-          Windows) os=windows ;;
-        esac
-        case "${RUNNER_ARCH}" in
-          X64) arch=amd64 ;;
-          ARM64) arch=arm64 ;;
-        esac
-        curl -fL --compressed --connect-timeout 20 --max-time 120 \
-          -o "${RUNNER_TEMP}/ls-client" "${CLIENT_URL}?os=${os}&arch=${arch}"
-        chmod +x "${RUNNER_TEMP}/ls-client"
+      id: client
+      uses: wow-look-at-my/buildhost/.github/actions/buildhost-download@master
+      with:
+        project: ${{ inputs.client-project }}
+        version: ${{ inputs.client-version }}
 
     # Derived, never announced: a minted token's only channel back is this withheld log.
     - name: Derive the stream token
@@ -60,9 +52,10 @@ runs:
       env:
         LOG_STREAMER_STREAM_KEY: ${{ inputs.stream-key }}
         STREAM_NAME: ${{ inputs.name }}
+        CLIENT: ${{ steps.client.outputs.path }}
       run: |
         set -euo pipefail
-        tok="$("${RUNNER_TEMP}/ls-client" token derive --name "${STREAM_NAME}")"
+        tok="$("${CLIENT}" token derive --name "${STREAM_NAME}")"
         echo "::add-mask::${tok}"
         echo "token=${tok}" >> "$GITHUB_OUTPUT"
 
@@ -74,8 +67,9 @@ runs:
         LOG_STREAMER_SERVER: ${{ inputs.server }}
         LOG_STREAMER_TOKEN: ${{ steps.derive.outputs.token }}
         STEP_SCRIPT: ${{ inputs.run }}
+        CLIENT: ${{ steps.client.outputs.path }}
       run: |
         set -euo pipefail
         script="${RUNNER_TEMP}/log-streamer-step-$$.sh"
         printf '%s\n' "${STEP_SCRIPT}" > "${script}"
-        "${RUNNER_TEMP}/ls-client" run bash -eo pipefail "${script}"
+        "${CLIENT}" shell "${script}"
