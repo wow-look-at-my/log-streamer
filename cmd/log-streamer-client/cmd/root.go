@@ -12,6 +12,10 @@ import (
 	"github.com/wow-look-at-my/log-streamer/internal/token"
 )
 
+// defaultServerURL is the org's server, so an ordinary client needs no flag
+// and no environment variable.
+const defaultServerURL = "wss://logs.pazer.io"
+
 var (
 	serverURL   string
 	streamToken string
@@ -23,7 +27,8 @@ var rootCmd = &cobra.Command{
 }
 
 func init() {
-	rootCmd.PersistentFlags().StringVar(&serverURL, "server", "", "server URL (overrides LOG_STREAMER_SERVER env)")
+	rootCmd.PersistentFlags().StringVar(&serverURL, "server", "",
+		"server URL (overrides LOG_STREAMER_SERVER env; default "+defaultServerURL+")")
 }
 
 // streamURL builds the stream endpoint, naming the stream when the caller
@@ -76,7 +81,7 @@ func getWSURL() string {
 	if v := os.Getenv("LOG_STREAMER_SERVER"); v != "" {
 		return v
 	}
-	return "ws://localhost:8080"
+	return defaultServerURL
 }
 
 func getHTTPURL() string {

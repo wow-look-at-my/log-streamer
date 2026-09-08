@@ -6,8 +6,9 @@ inputs:
     description: 'Command to run. Streamed to the server and still written to this job log.'
     required: true
   server:
-    description: 'log-streamer server URL (ws:// or wss://)'
-    required: true
+    description: 'log-streamer server URL (ws:// or wss://). Defaults to wss://logs.pazer.io.'
+    required: false
+    default: ''
   stream-key:
     description: 'Shared key the stream token derives from. Whoever watches needs the same key.'
     required: true

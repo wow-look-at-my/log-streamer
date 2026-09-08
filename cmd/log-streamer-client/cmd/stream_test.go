@@ -70,8 +70,8 @@ func TestGetURLs(t *testing.T) {
 
 	serverURL = ""
 	t.Setenv("LOG_STREAMER_SERVER", "")
-	require.Equal(t, "ws://localhost:8080", getWSURL())
-	require.Equal(t, "http://localhost:8080", getHTTPURL())
+	require.Equal(t, "wss://logs.pazer.io", getWSURL())
+	require.Equal(t, "https://logs.pazer.io", getHTTPURL())
 
 	serverURL = "wss://logs.example.com"
 	require.Equal(t, "wss://logs.example.com", getWSURL())
