@@ -128,6 +128,8 @@ Byte limits are plain integers (bytes). Durations use Go syntax (`30m`, `24h`, .
 
 The `--server`, `--token` and `--key` flags override the matching environment variables.
 
+A server URL may be written as `wss://`, `ws://`, `https://`, `http://`, or a bare host. The client converts it to the scheme each request needs. A bare host becomes `wss://`.
+
 ## Protocol
 
 - **Stream**: WebSocket at `/api/stream`. The server sends a JSON `hello` carrying the token. The client then streams log data as **binary frames**. The server sends a JSON `ack` with the byte count at the end. Each binary frame is `[stream:1 byte][timestamp:8 bytes big-endian unix-nanos][payload...]`. The payload is raw bytes, so any line length and any byte value survive. Pass `?token=<64 hex>` to name the stream yourself. The `hello` echoes back whichever token applies.

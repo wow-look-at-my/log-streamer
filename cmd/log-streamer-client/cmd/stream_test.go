@@ -83,6 +83,24 @@ func TestGetURLs(t *testing.T) {
 	require.Equal(t, "http://from-env:9000", getHTTPURL())
 }
 
+// A WebSocket dial rejects an http scheme, and a bare host outright.
+func TestGetWSURLNormalizesScheme(t *testing.T) {
+	lockGlobalState(t)
+	orig := serverURL
+	defer func() { serverURL = orig }()
+	t.Setenv("LOG_STREAMER_SERVER", "")
+
+	for in, want := range map[string]string{
+		"https://logs.pazer.io": "wss://logs.pazer.io",
+		"http://localhost:8080": "ws://localhost:8080",
+		"logs.pazer.io":         "wss://logs.pazer.io",
+		"wss://logs.pazer.io":   "wss://logs.pazer.io",
+	} {
+		serverURL = in
+		require.Equal(t, want, getWSURL(), "input %q", in)
+	}
+}
+
 func TestIsTerminal(t *testing.T) {
 	f, err := os.CreateTemp(t.TempDir(), "regular")
 	require.NoError(t, err)

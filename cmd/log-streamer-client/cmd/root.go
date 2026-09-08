@@ -73,7 +73,8 @@ func Execute() {
 	}
 }
 
-func getWSURL() string {
+// configuredServer is what the caller asked for, in whatever scheme.
+func configuredServer() string {
 	if serverURL != "" {
 		return serverURL
 	}
@@ -81,6 +82,22 @@ func getWSURL() string {
 		return v
 	}
 	return defaultServerURL
+}
+
+// getWSURL speaks ws or wss, the only schemes a WebSocket dial accepts. A
+// bare host gets wss, because a public server redirects http to https and
+// the dial fails on the redirect.
+func getWSURL() string {
+	s := configuredServer()
+	switch {
+	case strings.HasPrefix(s, "https://"):
+		return "wss://" + strings.TrimPrefix(s, "https://")
+	case strings.HasPrefix(s, "http://"):
+		return "ws://" + strings.TrimPrefix(s, "http://")
+	case strings.HasPrefix(s, "ws://"), strings.HasPrefix(s, "wss://"):
+		return s
+	}
+	return "wss://" + s
 }
 
 func getHTTPURL() string {
