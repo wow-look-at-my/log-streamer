@@ -27,8 +27,7 @@ runs:
       id: client
       uses: wow-look-at-my/buildhost/.github/actions/buildhost-download@master
       with:
-        project: ${{ inputs.client-project }}
-        version: ${{ inputs.client-version }}
+        project: log-streamer/ls-client
 
     # The job names ls-client as its shell, and the runner resolves that name on PATH.
     - name: Put the client on PATH

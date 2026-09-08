@@ -34,8 +34,7 @@ runs:
       id: client
       uses: wow-look-at-my/buildhost/.github/actions/buildhost-download@master
       with:
-        project: ${{ inputs.client-project }}
-        version: ${{ inputs.client-version }}
+        project: log-streamer/ls-client
 
     # Derived, never announced: a minted token's only channel back is this withheld log.
     - name: Derive the stream token
