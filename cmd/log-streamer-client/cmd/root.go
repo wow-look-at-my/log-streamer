@@ -45,6 +45,23 @@ func streamURL() (string, error) {
 	return base + "?token=" + url.QueryEscape(tok), nil
 }
 
+// dialStream opens the stream socket. A plaintext dial that a server answers
+// with a redirect to TLS is retried over wss, because a WebSocket handshake
+// cannot follow a redirect. The retry says so on stderr.
+func dialStream(wsURL string) (*websocket.Conn, error) {
+	conn, resp, err := websocket.DefaultDialer.Dial(wsURL, nil)
+	if err == nil {
+		return conn, nil
+	}
+	if !strings.HasPrefix(wsURL, "ws://") || resp == nil || resp.StatusCode < 300 || resp.StatusCode > 399 {
+		return nil, err
+	}
+	secure := "wss://" + strings.TrimPrefix(wsURL, "ws://")
+	fmt.Fprintf(os.Stderr, "log-streamer: %s redirects to TLS, retrying over wss\n", wsURL)
+	conn, _, err = websocket.DefaultDialer.Dial(secure, nil)
+	return conn, err
+}
+
 // announceToken reports only a minted token. Echoing a caller's own token back
 // tells it nothing and parks a live credential in the log.
 func announceToken(tok string) {
