@@ -85,8 +85,8 @@ func TestGetURLs(t *testing.T) {
 	require.Equal(t, "http://from-env:9000", getHTTPURL())
 }
 
-// A public server answers plaintext with a redirect to TLS, and a WebSocket
-// handshake cannot follow one. The dial retries over wss instead of failing.
+// A WebSocket handshake cannot follow the redirect a public server answers
+// plaintext with, so the dial retries over wss.
 func TestDialStreamRetriesOverTLSOnRedirect(t *testing.T) {
 	redirects := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "https://example.invalid"+r.URL.Path, http.StatusMovedPermanently)
@@ -96,8 +96,7 @@ func TestDialStreamRetriesOverTLSOnRedirect(t *testing.T) {
 	host := strings.TrimPrefix(redirects.URL, "http://")
 	_, err := dialStream("ws://" + host + "/api/stream")
 
-	// The retry reaches the same plaintext listener over TLS, which cannot
-	// complete a handshake. That error proves the second dial happened.
+	// A TLS error can only come from the retry: this listener speaks plaintext.
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "tls")
 }
