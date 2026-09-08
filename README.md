@@ -14,24 +14,24 @@ A client may name its own stream with `--token`. That is what makes a live CI bu
 
 ```bash
 # Run a command, stream its output (stdout + stderr) to the server
-log-streamer-client run make build
+ls-client run make build
 # prints to stderr: log-streamer token: <64-char-hex>
 
 # Pipe output to the server
-./long-running-job.sh | log-streamer-client send
+./long-running-job.sh | ls-client send
 # prints to stderr: log-streamer token: <64-char-hex>
 
 # Retrieve logs
-log-streamer-client fetch <token>
+ls-client fetch <token>
 
 # Trail a stream that is still being written, printing new lines as they land
-log-streamer-client fetch --follow <token>
+ls-client fetch --follow <token>
 
 # Retrieve logs verbatim (do not escape terminal control sequences)
-log-streamer-client fetch --raw <token>
+ls-client fetch --raw <token>
 
 # Delete logs
-log-streamer-client delete <token>
+ls-client delete <token>
 ```
 
 `fetch --follow` polls on a fixed interval (`--interval`, default `1s`). It prints only the lines it has not printed yet. A stream that does not exist yet makes it wait instead of fail. You can therefore start watching before the writer connects. Stop it with Ctrl-C.
@@ -44,11 +44,11 @@ log-streamer-client delete <token>
 
 ```bash
 # Run directly
-LOG_STREAMER_ADDR=:8080 LOG_STREAMER_DATA_DIR=/var/log/streams log-streamer-server
+LOG_STREAMER_ADDR=:8080 LOG_STREAMER_DATA_DIR=/var/log/streams ls-server
 
 # Run via Docker
-docker build -t log-streamer-server .
-docker run -p 8080:8080 -v /data/logs:/data/logs log-streamer-server
+docker build -t ls-server .
+docker run -p 8080:8080 -v /data/logs:/data/logs ls-server
 ```
 
 Point the client at your own server with `--server ws://localhost:8080`, or set `LOG_STREAMER_SERVER`.
@@ -64,7 +64,7 @@ Both sides instead derive the same token from a key they already share:
 ```bash
 # In the job, and again wherever you watch from
 export LOG_STREAMER_STREAM_KEY='...'      # a repository or org secret
-log-streamer-client token derive          # prints the token for this run
+ls-client token derive          # prints the token for this run
 ```
 
 Inside Actions the context defaults to `$GITHUB_REPOSITORY/$GITHUB_RUN_ID/$GITHUB_RUN_ATTEMPT/$GITHUB_JOB`. A watcher reads every one of those from the REST API. That API serves run metadata immediately while the log is still withheld. Pass `--context` to derive from something else.
@@ -92,9 +92,9 @@ export LOG_STREAMER_STREAM_KEY='...'
 
 run_id="$(gh run list --branch my-branch --limit 1 --json databaseId --jq '.[0].databaseId')"
 token="$(GITHUB_REPOSITORY=owner/repo GITHUB_RUN_ID=$run_id \
-         GITHUB_RUN_ATTEMPT=1 GITHUB_JOB=test log-streamer-client token derive)"
+         GITHUB_RUN_ATTEMPT=1 GITHUB_JOB=test ls-client token derive)"
 
-log-streamer-client fetch --follow "$token"
+ls-client fetch --follow "$token"
 ```
 
 Start this before or during the run. It waits for the stream to appear. Then it trails the stream.

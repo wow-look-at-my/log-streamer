@@ -1,6 +1,6 @@
 # log-streamer
 
-Go project with two binaries: `log-streamer-client` and `log-streamer-server`.
+Go project with two binaries: `ls-client` and `ls-server`.
 
 ## Build
 
@@ -12,8 +12,8 @@ Binaries are output to `build/`.
 
 ## Project structure
 
-- `cmd/log-streamer-client/` - CLI client (cobra, self-registering subcommands)
-- `cmd/log-streamer-server/` - Server binary
+- `cmd/ls-client/` - CLI client (cobra, self-registering subcommands)
+- `cmd/ls-server/` - Server binary
 - `internal/protocol/` - Shared JSON control types + binary wire frame codec (`wire.go`)
 - `internal/token/` - Token generation, validation, and HMAC derivation for CI
 - `.github/actions/stream/` - Composite action running a command through the client

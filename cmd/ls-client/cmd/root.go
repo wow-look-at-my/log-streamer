@@ -21,8 +21,8 @@ var (
 )
 
 var rootCmd = &cobra.Command{
-	Use:   "log-streamer-client",
-	Short: "Stream and retrieve logs from log-streamer-server",
+	Use:   "ls-client",
+	Short: "Stream and retrieve logs from ls-server",
 }
 
 func init() {

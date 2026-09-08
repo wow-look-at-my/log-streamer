@@ -23,7 +23,7 @@ inputs:
   client-url:
     description: 'Where to fetch the client binary'
     required: false
-    default: 'https://dl.pazer.build/log-streamer/client'
+    default: 'https://dl.pazer.build/log-streamer/ls-client'
 
 outputs:
   token:
@@ -50,8 +50,8 @@ runs:
           ARM64) arch=arm64 ;;
         esac
         curl -fL --compressed --connect-timeout 20 --max-time 120 \
-          -o "${RUNNER_TEMP}/log-streamer-client" "${CLIENT_URL}?os=${os}&arch=${arch}"
-        chmod +x "${RUNNER_TEMP}/log-streamer-client"
+          -o "${RUNNER_TEMP}/ls-client" "${CLIENT_URL}?os=${os}&arch=${arch}"
+        chmod +x "${RUNNER_TEMP}/ls-client"
 
     # Derived, never announced: a minted token's only channel back is this withheld log.
     - name: Derive the stream token
@@ -62,7 +62,7 @@ runs:
         STREAM_NAME: ${{ inputs.name }}
       run: |
         set -euo pipefail
-        tok="$("${RUNNER_TEMP}/log-streamer-client" token derive --name "${STREAM_NAME}")"
+        tok="$("${RUNNER_TEMP}/ls-client" token derive --name "${STREAM_NAME}")"
         echo "::add-mask::${tok}"
         echo "token=${tok}" >> "$GITHUB_OUTPUT"
 
@@ -78,4 +78,4 @@ runs:
         set -euo pipefail
         script="${RUNNER_TEMP}/log-streamer-step-$$.sh"
         printf '%s\n' "${STEP_SCRIPT}" > "${script}"
-        "${RUNNER_TEMP}/log-streamer-client" run bash -eo pipefail "${script}"
+        "${RUNNER_TEMP}/ls-client" run bash -eo pipefail "${script}"
