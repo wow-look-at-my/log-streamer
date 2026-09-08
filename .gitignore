@@ -1,4 +1,4 @@
-/log-streamer-client
-/log-streamer-server
+/ls-client
+/ls-server
 /data/
 /build/

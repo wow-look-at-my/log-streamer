@@ -9,7 +9,7 @@ import (
 )
 
 var rootCmd = &cobra.Command{
-	Use:   "log-streamer-server",
+	Use:   "ls-server",
 	Short: "Log streaming server",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		cfg := server.ConfigFromEnv()

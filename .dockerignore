@@ -2,6 +2,6 @@
 .github
 build/
 data/
-/log-streamer-client
-/log-streamer-server
+/ls-client
+/ls-server
 *.md

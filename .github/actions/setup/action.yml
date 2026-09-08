@@ -1,10 +1,7 @@
-name: 'Stream build output'
-description: 'Run a command with its output streamed to log-streamer, readable while the run is still in flight'
+name: 'Stream a whole job'
+description: 'Install the client and point the job at a stream, so every run step in the job streams live'
 
 inputs:
-  run:
-    description: 'Command to run. Streamed to the server and still written to this job log.'
-    required: true
   server:
     description: 'log-streamer server URL (ws:// or wss://). Defaults to wss://logs.pazer.io.'
     required: false
@@ -16,10 +13,6 @@ inputs:
     description: 'Extra context separating streams inside a job. Matrix legs MUST set this, or every leg writes to the same stream.'
     required: false
     default: ''
-  working-directory:
-    description: 'Directory to run the command in'
-    required: false
-    default: '.'
   client-project:
     description: 'buildhost project holding the client binary'
     required: false
@@ -45,6 +38,15 @@ runs:
         project: ${{ inputs.client-project }}
         version: ${{ inputs.client-version }}
 
+    # The job names ls-client as its shell, and the runner resolves that name on PATH.
+    - name: Put the client on PATH
+      shell: bash
+      env:
+        CLIENT_PATH: ${{ steps.client.outputs.path }}
+      run: |
+        set -euo pipefail
+        dirname "${CLIENT_PATH}" >> "${GITHUB_PATH}"
+
     # Derived, never announced: a minted token's only channel back is this withheld log.
     - name: Derive the stream token
       id: derive
@@ -52,24 +54,21 @@ runs:
       env:
         LOG_STREAMER_STREAM_KEY: ${{ inputs.stream-key }}
         STREAM_NAME: ${{ inputs.name }}
-        CLIENT: ${{ steps.client.outputs.path }}
       run: |
         set -euo pipefail
-        tok="$("${CLIENT}" token derive --name "${STREAM_NAME}")"
+        tok="$("${RUNNER_TEMP}/ls-client" token derive --name "${STREAM_NAME}")"
         echo "::add-mask::${tok}"
         echo "token=${tok}" >> "$GITHUB_OUTPUT"
 
-    # The client tees to stdout and exits with the command's status, so this log keeps every byte and a failure still fails the build.
-    - name: Run the command
+    # Later steps inherit these, so each appends to the one stream as its own section.
+    - name: Point the job's steps at the stream
       shell: bash
-      working-directory: ${{ inputs.working-directory }}
       env:
-        LOG_STREAMER_SERVER: ${{ inputs.server }}
-        LOG_STREAMER_TOKEN: ${{ steps.derive.outputs.token }}
-        STEP_SCRIPT: ${{ inputs.run }}
-        CLIENT: ${{ steps.client.outputs.path }}
+        SERVER: ${{ inputs.server }}
+        TOKEN: ${{ steps.derive.outputs.token }}
       run: |
         set -euo pipefail
-        script="${RUNNER_TEMP}/log-streamer-step-$$.sh"
-        printf '%s\n' "${STEP_SCRIPT}" > "${script}"
-        "${CLIENT}" shell "${script}"
+        echo "LOG_STREAMER_TOKEN=${TOKEN}" >> "${GITHUB_ENV}"
+        if [ -n "${SERVER}" ]; then
+          echo "LOG_STREAMER_SERVER=${SERVER}" >> "${GITHUB_ENV}"
+        fi

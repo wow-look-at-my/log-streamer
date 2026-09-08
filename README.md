@@ -14,24 +14,24 @@ A client may name its own stream with `--token`. That is what makes a live CI bu
 
 ```bash
 # Run a command, stream its output (stdout + stderr) to the server
-log-streamer-client run make build
+ls-client run make build
 # prints to stderr: log-streamer token: <64-char-hex>
 
 # Pipe output to the server
-./long-running-job.sh | log-streamer-client send
+./long-running-job.sh | ls-client send
 # prints to stderr: log-streamer token: <64-char-hex>
 
 # Retrieve logs
-log-streamer-client fetch <token>
+ls-client fetch <token>
 
 # Trail a stream that is still being written, printing new lines as they land
-log-streamer-client fetch --follow <token>
+ls-client fetch --follow <token>
 
 # Retrieve logs verbatim (do not escape terminal control sequences)
-log-streamer-client fetch --raw <token>
+ls-client fetch --raw <token>
 
 # Delete logs
-log-streamer-client delete <token>
+ls-client delete <token>
 ```
 
 `fetch --follow` polls on a fixed interval (`--interval`, default `1s`). It prints only the lines it has not printed yet. A stream that does not exist yet makes it wait instead of fail. You can therefore start watching before the writer connects. Stop it with Ctrl-C.
@@ -44,11 +44,11 @@ log-streamer-client delete <token>
 
 ```bash
 # Run directly
-LOG_STREAMER_ADDR=:8080 LOG_STREAMER_DATA_DIR=/var/log/streams log-streamer-server
+LOG_STREAMER_ADDR=:8080 LOG_STREAMER_DATA_DIR=/var/log/streams ls-server
 
 # Run via Docker
-docker build -t log-streamer-server .
-docker run -p 8080:8080 -v /data/logs:/data/logs log-streamer-server
+docker build -t ls-server .
+docker run -p 8080:8080 -v /data/logs:/data/logs ls-server
 ```
 
 Point the client at your own server with `--server ws://localhost:8080`, or set `LOG_STREAMER_SERVER`.
@@ -64,14 +64,41 @@ Both sides instead derive the same token from a key they already share:
 ```bash
 # In the job, and again wherever you watch from
 export LOG_STREAMER_STREAM_KEY='...'      # a repository or org secret
-log-streamer-client token derive          # prints the token for this run
+ls-client token derive          # prints the token for this run
 ```
 
 Inside Actions the context defaults to `$GITHUB_REPOSITORY/$GITHUB_RUN_ID/$GITHUB_RUN_ATTEMPT/$GITHUB_JOB`. A watcher reads every one of those from the REST API. That API serves run metadata immediately while the log is still withheld. Pass `--context` to derive from something else.
 
 Matrix legs of a job share `GITHUB_JOB`. Give each leg its own `--name`. Without it, every leg writes into the same stream.
 
-### In a workflow
+### A whole job, every step
+
+Add the setup action and name `ls-client` as the job's shell. Every `run:` step in the job then streams into the same token. Each step marks itself:
+
+```yaml
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: ls-client shell {0}
+    steps:
+      - uses: wow-look-at-my/log-streamer/.github/actions/setup@master
+        with:
+          stream-key: ${{ secrets.LOG_STREAMER_STREAM_KEY }}
+          name: ${{ matrix.os }}      # required only for a matrix job
+      - uses: actions/checkout@v4
+      - run: make build
+      - run: make test
+```
+
+Put the setup action first. It installs the client, puts it on `PATH`, and exports the token. The runner then resolves the job's shell by name on every later step. A `uses:` step is unaffected, because a job default never reaches inside an action.
+
+Actions writes each step's script to a file and passes the path as `{0}`. `ls-client shell` runs it with the flags a `bash` step gets (`--noprofile --norc -e -o pipefail`), so a step behaves as it did before. Set `LOG_STREAMER_SHELL` to use a different interpreter.
+
+### A single command
+
+To stream just one step, wrap that command instead:
 
 ```yaml
 - uses: wow-look-at-my/log-streamer/.github/actions/stream@master
@@ -83,7 +110,31 @@ Matrix legs of a job share `GITHUB_JOB`. Give each leg its own `--name`. Without
       make test
 ```
 
-Set `server:` only to reach a different server. The action installs the client and derives the token. It then runs your command through the client. Output still reaches the job's own log. The command's exit status is still the step's status. A failing command still fails the build. The action masks the derived token, so the log never shows it.
+Set `server:` on either action only to reach a different server. Both install the client and derive the token. Output still reaches the job's own log. The command's exit status is still the step's status. Both actions mask the derived token, so the log never shows it.
+
+### Reading a job back, step by step
+
+A job's steps share a token, so the log arrives as one stream. The client splits it again from the markers each step wrote:
+
+```bash
+ls-client fetch --steps "$token"     # what ran, how it ended, how long it took
+ls-client fetch --step 3 "$token"    # that step's output only
+ls-client fetch --step "make test" "$token"
+```
+
+A step is named by its position, by the runner's step id, or by its name. Actions exports no step name to a step. So a step is labelled with the command it opens with.
+
+Two things give a step a better name. A step's `id:` becomes its `GITHUB_ACTION` value, which is otherwise `__run`, `__run_2`, and so on. `LOG_STREAMER_STEP_NAME` sets the label directly:
+
+```yaml
+- run: make test
+  id: tests                       # ls-client fetch --step tests
+- run: make bench
+  env:
+    LOG_STREAMER_STEP_NAME: Benchmarks
+```
+
+A plain `fetch` prints the whole log with a header at each step boundary. `--raw` leaves the markers out, so piped output is only what the commands wrote.
 
 ### Watching from your machine
 
@@ -92,14 +143,16 @@ export LOG_STREAMER_STREAM_KEY='...'
 
 run_id="$(gh run list --branch my-branch --limit 1 --json databaseId --jq '.[0].databaseId')"
 token="$(GITHUB_REPOSITORY=owner/repo GITHUB_RUN_ID=$run_id \
-         GITHUB_RUN_ATTEMPT=1 GITHUB_JOB=test log-streamer-client token derive)"
+         GITHUB_RUN_ATTEMPT=1 GITHUB_JOB=test ls-client token derive)"
 
-log-streamer-client fetch --follow "$token"
+ls-client fetch --follow "$token"
 ```
 
 Start this before or during the run. It waits for the stream to appear. Then it trails the stream.
 
 ### Buffering, the thing that will bite you
+
+The client sends on line boundaries. A partial line goes anyway after 200ms, so a prompt or a progress line reaches a watcher without its newline.
 
 A program that writes to a pipe rather than a terminal usually switches to block buffering. Its output can then sit in that program's own buffer before log-streamer sees any of it. This is the program's behaviour, not the stream's. Use `stdbuf -oL` when a build goes quiet and then emits everything at once. Many tools also have an unbuffered flag of their own.
 
@@ -131,6 +184,8 @@ The `--server`, `--token` and `--key` flags override the matching environment va
 A server URL may be written as `wss://`, `ws://`, `https://`, `http://`, or a bare host. The client converts it to the scheme each request needs. A bare host becomes `wss://`.
 
 ## Protocol
+
+Frames on the `marker` stream carry a JSON step boundary rather than output: `{"event":"step_start","step":"__run_2","cmd":"make test","job":"test"}`, and an end marker with the step's `exit`. A reader that does not know them treats them as ordinary lines.
 
 - **Stream**: WebSocket at `/api/stream`. The server sends a JSON `hello` carrying the token. The client then streams log data as **binary frames**. The server sends a JSON `ack` with the byte count at the end. Each binary frame is `[stream:1 byte][timestamp:8 bytes big-endian unix-nanos][payload...]`. The payload is raw bytes, so any line length and any byte value survive. Pass `?token=<64 hex>` to name the stream yourself. The `hello` echoes back whichever token applies.
 - **Fetch**: `GET /api/logs/{token}` returns all reassembled log lines as JSON. `?since=<n>` returns only the lines from index `n`. The `count` field stays the total. `fetch --follow` uses that to trail a growing log.

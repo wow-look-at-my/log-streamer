@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/gorilla/websocket"
 	"github.com/spf13/cobra"
 	"github.com/wow-look-at-my/log-streamer/internal/protocol"
 )
@@ -42,10 +41,24 @@ func runSend(cmd *cobra.Command, args []string) error {
 	defer close(pingDone)
 
 	sender := &wsSender{conn: conn}
+
+	// Piped output gets its own section when the runner's env names a step.
+	step := stepFromEnv()
+	if step != nil {
+		step.Event = protocol.EventStepStart
+		sendMarker(sender, *step)
+	}
+
 	pumpErr := pump(os.Stdin, protocol.StreamStdin, os.Stdout, sender.sendFrame)
 
-	conn.WriteMessage(websocket.CloseMessage,
-		websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
+	// The end marker must reach the wire before the close, so it cannot be
+	// deferred past it.
+	if step != nil {
+		done := 0
+		step.Event, step.Exit = protocol.EventStepEnd, &done
+		sendMarker(sender, *step)
+	}
+	closeStream(conn)
 
 	return pumpErr
 }
