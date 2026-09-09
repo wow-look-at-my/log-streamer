@@ -47,6 +47,28 @@ func (s *Server) handleFetch(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// handleGroup lists the streams that registered under a group token. That
+// token reaches every log it names, so it is as much a secret as they are.
+func (s *Server) handleGroup(w http.ResponseWriter, r *http.Request) {
+	group := r.PathValue("group")
+	if !token.Validate(group) {
+		writeJSON(w, http.StatusBadRequest, protocol.ErrorResponse{Error: "invalid token format"})
+		return
+	}
+
+	members, err := s.store.Members(group)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			writeJSON(w, http.StatusNotFound, protocol.ErrorResponse{Error: "group not found"})
+			return
+		}
+		writeJSON(w, http.StatusInternalServerError, protocol.ErrorResponse{Error: "failed to read the group"})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, protocol.GroupResponse{Group: group, Streams: members})
+}
+
 func (s *Server) handleDelete(w http.ResponseWriter, r *http.Request) {
 	tok := r.PathValue("token")
 	if !token.Validate(tok) {

@@ -129,7 +129,7 @@ func setDeriveFlags(t *testing.T, key, context, name string) {
 func mustDerive(t *testing.T) string {
 	t.Helper()
 	key := deriveKey
-	tok, err := token.Derive(key, deriveContextOrDefault())
+	tok, err := token.Derive(key, derivedContext())
 	require.NoError(t, err)
 	require.True(t, token.Validate(tok))
 	require.False(t, strings.Contains(tok, "/"))

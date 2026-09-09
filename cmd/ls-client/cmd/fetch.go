@@ -32,10 +32,16 @@ var (
 var errStreamNotFound = errors.New("stream not found")
 
 var fetchCmd = &cobra.Command{
-	Use:   "fetch <token>",
+	Use:   "fetch [token]",
 	Short: "Retrieve logs by token",
-	Args:  cobra.ExactArgs(1),
-	RunE:  runFetch,
+	Long: `Retrieve logs by token.
+
+Pass the token, or pass the key and the run it belongs to and let the client
+derive the same token the writer used:
+
+  ls-client fetch --follow --key "$KEY" --context owner/repo/12345/1/test`,
+	Args: cobra.MaximumNArgs(1),
+	RunE: runFetch,
 }
 
 func init() {
@@ -53,7 +59,10 @@ func init() {
 }
 
 func runFetch(cmd *cobra.Command, args []string) error {
-	tok := args[0]
+	tok, err := tokenArgOrDerived(args)
+	if err != nil {
+		return err
+	}
 	// Untrusted log content: escape control sequences on a terminal only.
 	sanitize := !fetchRaw && isTerminal(os.Stdout)
 
