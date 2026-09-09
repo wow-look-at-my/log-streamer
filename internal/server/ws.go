@@ -66,7 +66,8 @@ func (s *Server) handleStream(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if err := conn.WriteJSON(protocol.ServerHello{Token: tok}); err != nil {
+	// BytesStored is what this stream already holds. A client that reconnects resumes from there.
+	if err := conn.WriteJSON(protocol.ServerHello{Token: tok, BytesStored: s.store.StoredBytes(tok)}); err != nil {
 		log.Printf("write hello: %v", err)
 		return
 	}

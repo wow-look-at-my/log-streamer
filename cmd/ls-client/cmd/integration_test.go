@@ -161,10 +161,12 @@ func TestClientRunViaCLIWithChildFlags(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestClientRunConnectError(t *testing.T) {
+// An absent server costs the stream and nothing else: a wrapper that fails a step because its
+// logging failed is the defect this client exists to avoid.
+func TestClientRunSurvivesAnAbsentServer(t *testing.T) {
 	lockGlobalState(t)
 	orig := serverURL
 	serverURL = "ws://127.0.0.1:1" // nothing listening
 	defer func() { serverURL = orig }()
-	require.Error(t, runRun(runCmd, []string{"echo", "hi"}))
+	require.NoError(t, runRun(runCmd, []string{"echo", "hi"}))
 }

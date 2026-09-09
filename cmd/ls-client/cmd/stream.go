@@ -3,31 +3,13 @@ package cmd
 import (
 	"bytes"
 	"io"
-	"sync"
 	"time"
 
-	"github.com/gorilla/websocket"
 	"github.com/wow-look-at-my/log-streamer/internal/protocol"
 )
 
 // chunkSize bounds bytes read and sent per frame.
 const chunkSize = 32 * 1024
-
-// wsSender serializes binary frame writes to a shared connection; control
-// writes stay safe to interleave.
-type wsSender struct {
-	conn *websocket.Conn
-	mu   sync.Mutex
-}
-
-// sendFrame encodes and sends a frame; the payload is copied, so callers may
-// reuse their buffer right after.
-func (s *wsSender) sendFrame(stream protocol.StreamID, ts time.Time, payload []byte) error {
-	body := protocol.EncodeWire(stream, ts, payload)
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.conn.WriteMessage(websocket.BinaryMessage, body)
-}
 
 // flushInterval bounds the wait for a newline, so a prompt still gets through.
 const flushInterval = 200 * time.Millisecond
@@ -39,12 +21,16 @@ type readResult struct {
 	err  error
 }
 
-// pump reads r, tees the raw bytes to local (best effort), and sends them as
-// binary frames on line boundaries. A frame carries whole lines when they are
-// available. A partial line is sent anyway when flushInterval passes, and a
-// line longer than chunkSize is sent in pieces, which bounds memory. The
-// timestamp is when the bytes were read, not when they were sent. send must
-// not retain the payload after it returns.
+// pump reads r, tees the raw bytes to local, and sends them as binary frames on
+// line boundaries. A frame carries whole lines when they are available. A
+// partial line is sent anyway when flushInterval passes, and a line longer than
+// chunkSize is sent in pieces, which bounds memory. The timestamp is when the
+// bytes were read, not when they were sent. send must not retain the payload
+// after it returns.
+//
+// send hands the frame to the spool and returns; it does not reach the network,
+// so a stalled socket cannot slow the reader and a dropped socket cannot truncate
+// it. Only a disk failure stops this pump.
 func pump(r io.Reader, stream protocol.StreamID, local io.Writer, send func(protocol.StreamID, time.Time, []byte) error) error {
 	reads := make(chan readResult)
 	go func() {
@@ -69,12 +55,19 @@ func pump(r io.Reader, stream protocol.StreamID, local io.Writer, send func(prot
 	defer timer.Stop()
 	armed := false
 
+	// The local tee is the copy of record, so a dead socket retires the stream and costs the
+	// reader nothing. Retiring is not repeated, or a long step pays a failed send per chunk.
+	retired := false
+
 	flush := func(upTo int) error {
-		if upTo == 0 {
+		if upTo == 0 || retired {
+			pending = append(pending[:0], pending[upTo:]...)
 			return nil
 		}
 		if err := send(stream, pendingAt, pending[:upTo]); err != nil {
-			return err
+			retired = true
+			pending = pending[:0]
+			return nil
 		}
 		pending = append(pending[:0], pending[upTo:]...)
 		if len(pending) == 0 && armed {

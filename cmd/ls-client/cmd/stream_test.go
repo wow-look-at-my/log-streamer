@@ -33,6 +33,60 @@ func TestPumpSmallInput(t *testing.T) {
 	require.Equal(t, input, local.Bytes())
 }
 
+// A dead socket must cost the stream and nothing else. The job log is the copy of record, and a
+// CI step that loses its tail loses whatever it was measuring.
+func TestPumpKeepsTeeingAfterTheStreamDies(t *testing.T) {
+	input := []byte("first\nsecond\nthird\nfourth\n")
+	var local bytes.Buffer
+	calls := 0
+
+	err := pump(bytes.NewReader(input), protocol.StreamStdout, &local,
+		func(protocol.StreamID, time.Time, []byte) error {
+			calls++
+			return io.ErrClosedPipe
+		})
+
+	require.NoError(t, err, "a dead stream is not the reader's failure")
+	require.Equal(t, input, local.Bytes(), "the local tee must carry every byte the command wrote")
+	require.Equal(t, 1, calls, "a retired stream must not be retried per chunk")
+}
+
+// The same, with the reader handing over a line per read: the failure lands mid-stream rather
+// than on the opening frame, which is what a reset socket does to a long step.
+func TestPumpKeepsTeeingWhenTheStreamDiesPartWay(t *testing.T) {
+	lines := []string{"one\n", "two\n", "three\n", "four\n"}
+	var local bytes.Buffer
+	sent := 0
+
+	err := pump(&lineReader{lines: lines}, protocol.StreamStdout, &local,
+		func(_ protocol.StreamID, _ time.Time, payload []byte) error {
+			sent++
+			if sent == 2 {
+				return io.ErrUnexpectedEOF
+			}
+			return nil
+		})
+
+	require.NoError(t, err)
+	require.Equal(t, strings.Join(lines, ""), local.String())
+	require.Equal(t, 2, sent, "sending stops at the first failure and never resumes")
+}
+
+// lineReader hands back a line per Read, so a pump sends a frame per line.
+type lineReader struct {
+	lines []string
+	at    int
+}
+
+func (r *lineReader) Read(p []byte) (int, error) {
+	if r.at >= len(r.lines) {
+		return 0, io.EOF
+	}
+	n := copy(p, r.lines[r.at])
+	r.at++
+	return n, nil
+}
+
 func TestPumpChunksLargeInput(t *testing.T) {
 	// Larger than chunkSize with no newline: must stream in bounded frames.
 	input := []byte(strings.Repeat("a", chunkSize*3+17))
