@@ -102,6 +102,9 @@ func (s *Store) filePath(tok string) (string, error) {
 // TotalBytes returns the approximate total on-disk usage.
 func (s *Store) TotalBytes() int64 { return atomic.LoadInt64(&s.totalBytes) }
 
+// addTotalBytes accounts for bytes written outside a stream's own writer.
+func (s *Store) addTotalBytes(n int64) { atomic.AddInt64(&s.totalBytes, n) }
+
 // Writer holds an open append handle for a stream's lifetime so the server
 // does not pay an open/close syscall per frame.
 type Writer struct {
@@ -319,16 +322,24 @@ func (s *Store) Sweep(now time.Time) (int, error) {
 	removed := 0
 	cutoff := now.Add(-s.ttl)
 	for _, e := range entries {
-		if e.IsDir() || filepath.Ext(e.Name()) != fileExt {
+		if e.IsDir() {
 			continue
 		}
 		info, err := e.Info()
 		if err != nil || !info.ModTime().Before(cutoff) {
 			continue
 		}
-		tok := strings.TrimSuffix(e.Name(), fileExt)
-		if err := s.Delete(tok); err == nil {
-			removed++
+		switch filepath.Ext(e.Name()) {
+		case fileExt:
+			if err := s.Delete(strings.TrimSuffix(e.Name(), fileExt)); err == nil {
+				removed++
+			}
+		case groupExt:
+			// A group index expires like the logs it points at, or the
+			// directory keeps an index of streams that are long gone.
+			if err := s.deleteGroup(strings.TrimSuffix(e.Name(), groupExt)); err == nil {
+				removed++
+			}
 		}
 	}
 	return removed, nil

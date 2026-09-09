@@ -37,3 +37,20 @@ type FetchResponse struct {
 	Lines []StreamMessage `json:"lines"`
 	Count int             `json:"count"`
 }
+
+// GroupMember is a stream that named a group when it opened. Label is what the
+// writer called itself, which is a matrix leg or a job name in CI.
+type GroupMember struct {
+	Token     string    `json:"token"`
+	Label     string    `json:"label,omitempty"`
+	FirstSeen time.Time `json:"first_seen"`
+	LastSeen  time.Time `json:"last_seen"`
+	Bytes     int64     `json:"bytes"`
+}
+
+// GroupResponse lists what registered under a group token, which therefore
+// reaches every log it names.
+type GroupResponse struct {
+	Group   string        `json:"group"`
+	Streams []GroupMember `json:"streams"`
+}

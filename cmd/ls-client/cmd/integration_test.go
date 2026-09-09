@@ -4,6 +4,7 @@ import (
 	"io"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -52,6 +53,27 @@ func captureStdout(t *testing.T) {
 		os.Stdout = orig
 		f.Close()
 	})
+}
+
+// captureStdoutText redirects os.Stdout like captureStdout, and returns a
+// reader for what a command printed.
+func captureStdoutText(t *testing.T) func() string {
+	t.Helper()
+	orig := os.Stdout
+	path := filepath.Join(t.TempDir(), "stdout")
+	f, err := os.Create(path)
+	require.NoError(t, err)
+	os.Stdout = f
+	t.Cleanup(func() {
+		os.Stdout = orig
+		f.Close()
+	})
+	return func() string {
+		require.NoError(t, f.Sync())
+		body, err := os.ReadFile(path)
+		require.NoError(t, err)
+		return string(body)
+	}
 }
 
 func streamOneFrame(t *testing.T, ts *httptest.Server, payload string) string {

@@ -67,9 +67,32 @@ export LOG_STREAMER_STREAM_KEY='...'      # a repository or org secret
 ls-client token derive          # prints the token for this run
 ```
 
+Every command that names a stream takes `--key`, `--context` and `--name`, so nothing has to derive the token first and pass it on. A job with the key set streams into the right token, and a watcher with the same key reads it back:
+
+```bash
+ls-client fetch --follow --key "$KEY" --context owner/repo/12345/1/test
+```
+
 Inside Actions the context defaults to `$GITHUB_REPOSITORY/$GITHUB_RUN_ID/$GITHUB_RUN_ATTEMPT/$GITHUB_JOB`. A watcher reads every one of those from the REST API. That API serves run metadata immediately while the log is still withheld. Pass `--context` to derive from something else.
 
 Matrix legs of a job share `GITHUB_JOB`. Give each leg its own `--name`. Without it, every leg writes into the same stream.
+
+### Listing a run's streams
+
+A watcher cannot guess a leg's name. So it does not know that leg's token. Every stream also registers under a **group** token, derived from the run alone, and the group lists them:
+
+```bash
+ls-client streams --key "$KEY" --context owner/repo/12345/1
+```
+
+```
+2f1c...  1.4KB  2026-09-08T12:41:02Z  test (ubuntu-latest)
+9ab7...  892B   2026-09-08T12:41:04Z  test (macos-14)
+```
+
+Each row's token is what `fetch` reads. `--json` prints the same listing for a script. The group spans the whole run, so every job of it lists too, not only the legs of one job.
+
+The group token reaches every stream it names. It derives from the same key, so it is exactly as secret as the tokens it lists.
 
 ### A whole job, every step
 
@@ -190,6 +213,7 @@ Frames on the `marker` stream carry a JSON step boundary rather than output: `{"
 - **Stream**: WebSocket at `/api/stream`. The server sends a JSON `hello` carrying the token. The client then streams log data as **binary frames**. The server sends a JSON `ack` with the byte count at the end. Each binary frame is `[stream:1 byte][timestamp:8 bytes big-endian unix-nanos][payload...]`. The payload is raw bytes, so any line length and any byte value survive. Pass `?token=<64 hex>` to name the stream yourself. The `hello` echoes back whichever token applies.
 - **Fetch**: `GET /api/logs/{token}` returns all reassembled log lines as JSON. `?since=<n>` returns only the lines from index `n`. The `count` field stays the total. `fetch --follow` uses that to trail a growing log.
 - **Delete**: `DELETE /api/logs/{token}` removes the log.
+- **Group**: `GET /api/groups/{group}` lists the streams that registered under a group token, with each one's label, size, and when it last connected. A stream joins by passing `?group=<64 hex>&label=<text>` when it opens.
 
 A fetch reads a stream that is still open, and returns everything written so far. That is what makes a live CI build readable mid-run.
 

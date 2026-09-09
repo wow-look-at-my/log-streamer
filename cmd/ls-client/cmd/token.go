@@ -12,6 +12,7 @@ var (
 	deriveKey     string
 	deriveContext string
 	deriveName    string
+	deriveGroup   bool
 )
 
 var tokenCmd = &cobra.Command{
@@ -48,12 +49,10 @@ values, say) or every leg writes into the same stream.`,
 }
 
 func init() {
-	tokenDeriveCmd.Flags().StringVar(&deriveKey, "key", "",
-		"shared derivation key (overrides LOG_STREAMER_STREAM_KEY env)")
-	tokenDeriveCmd.Flags().StringVar(&deriveContext, "context", "",
-		"context to derive from (default: repository/run-id/run-attempt/job from the GitHub Actions env)")
-	tokenDeriveCmd.Flags().StringVar(&deriveName, "name", "",
-		"extra context appended to the default, to separate streams within a job")
+	// --key, --context and --name are global: every command that names a
+	// stream derives it the same way.
+	tokenDeriveCmd.Flags().BoolVar(&deriveGroup, "group", false,
+		"print the run's group token, which lists every stream of the run rather than reading one")
 
 	tokenCmd.AddCommand(tokenGenerateCmd)
 	tokenCmd.AddCommand(tokenDeriveCmd)
@@ -70,12 +69,15 @@ func runTokenGenerate(cmd *cobra.Command, args []string) error {
 }
 
 func runTokenDerive(cmd *cobra.Command, args []string) error {
-	key := deriveKey
-	if key == "" {
-		key = os.Getenv("LOG_STREAMER_STREAM_KEY")
+	key := derivationKey()
+
+	derive, context := token.Derive, derivedContext()
+	if deriveGroup {
+		// A group spans the run, so it drops the job and the name.
+		derive, context = token.DeriveGroup, derivedGroupContext()
 	}
 
-	tok, err := token.Derive(key, deriveContextOrDefault())
+	tok, err := derive(key, context)
 	switch {
 	case err == token.ErrNoKey:
 		return fmt.Errorf("no derivation key: pass --key or set LOG_STREAMER_STREAM_KEY")
@@ -89,17 +91,44 @@ func runTokenDerive(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// deriveContextOrDefault names the stream, falling back to the identity
-// GitHub Actions gives a job.
-func deriveContextOrDefault() string {
+// derivationKey is the secret both ends share.
+func derivationKey() string {
+	return firstEnvOr(deriveKey, "LOG_STREAMER_STREAM_KEY")
+}
+
+// derivedGroupContext names the run a group indexes. It stops at the run
+// attempt, so every job and every leg lands in the same listing.
+func derivedGroupContext() string {
 	if deriveContext != "" {
-		return token.Context(deriveContext, deriveName)
+		return deriveContext
+	}
+	return token.Context(
+		os.Getenv("GITHUB_REPOSITORY"),
+		os.Getenv("GITHUB_RUN_ID"),
+		os.Getenv("GITHUB_RUN_ATTEMPT"),
+	)
+}
+
+// derivedContext names the stream, falling back to the identity GitHub Actions
+// gives a job.
+func derivedContext() string {
+	name := firstEnvOr(deriveName, "LOG_STREAMER_NAME")
+	if deriveContext != "" {
+		return token.Context(deriveContext, name)
 	}
 	return token.Context(
 		os.Getenv("GITHUB_REPOSITORY"),
 		os.Getenv("GITHUB_RUN_ID"),
 		os.Getenv("GITHUB_RUN_ATTEMPT"),
 		os.Getenv("GITHUB_JOB"),
-		deriveName,
+		name,
 	)
+}
+
+// firstEnvOr prefers what the caller passed on the command line.
+func firstEnvOr(flag string, names ...string) string {
+	if flag != "" {
+		return flag
+	}
+	return firstEnv(names...)
 }

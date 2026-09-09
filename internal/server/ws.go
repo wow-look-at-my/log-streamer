@@ -49,7 +49,24 @@ func (s *Server) handleStream(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// What this stream already holds. A client that reconnects resumes from here.
+	// A stream may index itself under a group, which is how a watcher finds
+	// legs whose names it cannot know. Registering is part of opening: a
+	// silent skip would leave the stream invisible to a listing.
+	if group := r.URL.Query().Get("group"); group != "" {
+		if !token.Validate(group) {
+			conn.WriteMessage(websocket.CloseMessage,
+				websocket.FormatCloseMessage(websocket.ClosePolicyViolation, "invalid group format"))
+			return
+		}
+		if err := s.store.Join(group, tok, r.URL.Query().Get("label")); err != nil {
+			log.Printf("group join: %v", err)
+			conn.WriteMessage(websocket.CloseMessage,
+				websocket.FormatCloseMessage(websocket.CloseInternalServerErr, "group registration failed"))
+			return
+		}
+	}
+
+	// BytesStored is what this stream already holds. A client that reconnects resumes from there.
 	if err := conn.WriteJSON(protocol.ServerHello{Token: tok, BytesStored: s.store.StoredBytes(tok)}); err != nil {
 		log.Printf("write hello: %v", err)
 		return
