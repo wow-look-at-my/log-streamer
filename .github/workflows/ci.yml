@@ -18,3 +18,24 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: wow-look-at-my/go-toolchain@master
+
+  # The setup action names ls-client as the job's shell, so the runner execs it.
+  whole-job-shell:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: ls-client shell {0}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+        with:
+          stream-key: ${{ secrets.LOG_STREAMER_STREAM_KEY }}
+      - name: A step runs, and its output reaches the stream
+        id: streamed
+        run: echo "the job shell started and ran this step"
+      - name: The stream holds what that step wrote
+        shell: bash
+        run: |
+          set -euo pipefail
+          ls-client fetch --raw "$(ls-client token derive)" > streamed.txt
+          grep -q "the job shell started and ran this step" streamed.txt
