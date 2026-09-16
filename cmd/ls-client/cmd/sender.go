@@ -111,6 +111,10 @@ func recordLen(frame []byte) int64 {
 // repeats it.
 // It reports false when the stream was retired while it was still dialling.
 func (d *durableSender) connect() bool {
+	// A dial that keeps failing is reported once per distinct error: the retry
+	// loop never gives up, so without this a stream that never connects leaves no
+	// trace of why in the job log.
+	var lastErr string
 	for {
 		select {
 		case <-d.quit:
@@ -119,12 +123,19 @@ func (d *durableSender) connect() bool {
 		}
 		conn, hello, err := d.dial()
 		if err != nil {
+			if msg := err.Error(); msg != lastErr {
+				lastErr = msg
+				fmt.Fprintf(os.Stderr, "log-streamer: dial failed, retrying every %s: %v\n", redialInterval, err)
+			}
 			select {
 			case <-time.After(redialInterval):
 			case <-d.quit:
 				return false
 			}
 			continue
+		}
+		if lastErr != "" {
+			fmt.Fprintln(os.Stderr, "log-streamer: connected")
 		}
 		d.conn = conn
 		// A quiet command still has to hold the connection open: the server drops an
