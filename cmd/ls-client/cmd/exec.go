@@ -22,8 +22,7 @@ func streamExec(args []string, step *protocol.Marker) error {
 		return err
 	}
 
-	// The queue sits between the command and the socket, so the command's output
-	// never waits on the network and nothing is lost when the network breaks.
+	// The queue sits between the command and the socket.
 	q := newQueue()
 	sender := newDurableSender(q, func() (*websocket.Conn, protocol.ServerHello, error) {
 		conn, err := dialStream(wsURL)
@@ -91,8 +90,7 @@ func streamExec(args []string, step *protocol.Marker) error {
 		sendMarker(sender, end)
 	}
 
-	// The tail. Nothing waited on the network while the command ran, so the whole
-	// wait lands here, where there is no command left to slow down.
+	// The tail.
 	q.Close()
 	sender.wait()
 	if waited := time.Since(drainStart); waited > slowDrain {
@@ -112,17 +110,15 @@ func streamExec(args []string, step *protocol.Marker) error {
 // ackTimeout bounds the wait for the server to confirm what it stored.
 const ackTimeout = 10 * time.Second
 
-// slowDrain is when a catch-up is worth saying out loud. A step that ends and
-// then sits here is a step whose stream was behind, and silence about that reads
-// as the step itself being slow.
+// slowDrain is when a catch-up is worth saying out loud.
 const slowDrain = 5 * time.Second
 
 // closeStream ends the stream and waits for the server to answer. Ordering
-// holds within a connection and not between separate ones, and each step of a
-// job opens its own, so a step that exits early lets its tail land after the
-// next step's output. The server answers a close only after its reader has
-// drained, which is the proof this waits for. The ack says the same thing, and
-// the echoed close usually arrives ahead of it.
+// holds within a connection and not between separate ones. Each step of a job
+// opens its own, so a step that exits early lets its tail land after the next
+// step's output. The server answers a close only after its reader has drained,
+// which is the proof this waits for. The ack says the same thing, and the
+// echoed close usually arrives ahead of it.
 func closeStream(conn *websocket.Conn) {
 	conn.WriteMessage(websocket.CloseMessage,
 		websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))

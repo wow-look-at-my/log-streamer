@@ -2,13 +2,7 @@ package cmd
 
 import "sync"
 
-// queue holds frames the sender has not yet put on the wire. Push never waits
-// on the network, so a stalled or dead stream cannot slow the command down, and
-// a frame stays here until the server has it, so a dropped connection loses
-// nothing.
-//
-// A frame leaves only when the server is known to hold it. That is what makes
-// the order on the wire the order they were produced in.
+// queue holds frames the sender has not yet put on the wire.
 type queue struct {
 	mu     sync.Mutex
 	wake   *sync.Cond

@@ -68,7 +68,7 @@ func (s step) Exit() (int, bool) {
 }
 
 // groupSteps splits a log into its marked steps. Whatever precedes a start
-// marker is preamble: a log with no markers at all is entirely preamble, which
+// marker is preamble: a log with no markers at all is entirely preamble. This
 // is what a stream that never went through the shell looks like.
 func groupSteps(lines []protocol.StreamMessage) (steps []step, preamble []protocol.StreamMessage) {
 	var current *step
