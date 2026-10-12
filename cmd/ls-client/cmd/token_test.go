@@ -18,6 +18,7 @@ func setStreamToken(t *testing.T, tok string) {
 }
 
 func TestStreamURLNamesTheCallersStream(t *testing.T) {
+	t.Serial()
 	lockGlobalState(t)
 	serverURL = "ws://logs.example.com"
 	t.Cleanup(func() { serverURL = "" })
@@ -34,6 +35,7 @@ func TestStreamURLNamesTheCallersStream(t *testing.T) {
 }
 
 func TestStreamURLReadsTheTokenFromTheEnvironment(t *testing.T) {
+	t.Serial()
 	lockGlobalState(t)
 	serverURL = "ws://logs.example.com"
 	t.Cleanup(func() { serverURL = "" })
