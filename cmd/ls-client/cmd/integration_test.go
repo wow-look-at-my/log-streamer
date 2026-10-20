@@ -147,6 +147,7 @@ func TestClientRun(t *testing.T) {
 }
 
 func TestClientRunViaCLIWithChildFlags(t *testing.T) {
+	t.Serial() // this test writes the package-level serverURL
 	lockGlobalState(t)
 	ts := startClientTestServer(t)
 	captureStdout(t)
@@ -164,6 +165,7 @@ func TestClientRunViaCLIWithChildFlags(t *testing.T) {
 // An absent server costs the stream and nothing else. A wrapper that fails a step because its
 // logging failed is the defect this client exists to avoid.
 func TestClientRunSurvivesAnAbsentServer(t *testing.T) {
+	t.Serial() // this test writes the package-level serverURL
 	lockGlobalState(t)
 	orig := serverURL
 	serverURL = "ws://127.0.0.1:1" // nothing listening
