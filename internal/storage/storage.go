@@ -124,10 +124,7 @@ func (s *Store) OpenWriter(tok string) (*Writer, error) {
 	if err != nil {
 		return nil, err
 	}
-	// A reconnecting client opens another writer on a stream that already has
-	// bytes. Starting the count fresh hands it the whole per-stream cap again,
-	// so a stream that reconnects often has no cap at all. The file size counts
-	// the record headers too, which errs toward the cap and never past it.
+	// A reconnecting client opens another writer on a stream that already has bytes.
 	w := &Writer{store: s, tok: tok, f: f}
 	if info, err := os.Stat(path); err == nil {
 		w.streamBytes = info.Size()
@@ -173,10 +170,11 @@ func (w *Writer) Append(body []byte) error {
 // Close releases the append handle.
 func (w *Writer) Close() error { return w.f.Close() }
 
-// Fetch reads a stream and reassembles its frames into whole lines, splitting
-// each stream's concatenated payload on '\n' and stamping every line with the
-// timestamp of the frame that started it. It reads without a lock, so it
-// reflects data up to the current end of file and skips a torn final record.
+// Fetch reads a stream. Fetch reassembles its frames into whole lines,
+// splitting each stream's concatenated payload on '\n' and stamping every
+// line with the timestamp of the frame. That frame started it. It reads
+// without a lock, so it reflects data up to the current end of file and skips
+// a torn final record.
 func (s *Store) Fetch(tok string) ([]protocol.StreamMessage, error) {
 	path, err := s.filePath(tok)
 	if err != nil {
@@ -285,9 +283,7 @@ func (s *Store) Delete(tok string) error {
 }
 
 // StoredBytes is the size of what this stream already holds, in the record
-// framing the file is written in. A reconnecting client lines its own position
-// up against this number, so it resumes at a record boundary rather than
-// guessing. An absent stream holds nothing.
+// framing the file is written in.
 func (s *Store) StoredBytes(tok string) int64 {
 	path, err := s.filePath(tok)
 	if err != nil {

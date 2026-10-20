@@ -6,7 +6,7 @@ The client talks to `wss://logs.pazer.io` unless you point it somewhere else wit
 
 The server is intentionally **public / unauthenticated**: anyone who can reach it may open a stream. The 256-bit token is the only credential needed to fetch or delete a stream's logs. Treat it as a secret.
 
-A client may name its own stream with `--token`. That is what makes a live CI build watchable, as described under [Watching a CI build live](#watching-a-ci-build-live). A caller holding a token can therefore append to that stream, as well as read and delete it. The token was always the whole credential. What a caller still cannot do is choose a storage path: every token is validated as 64 hex characters before it names a file.
+A client may name its own stream with `--token`. That is what makes a live CI build watchable, as described under [Watching a CI build live](#watching-a-ci-build-live). A caller holding a token can therefore append to that stream, as well as read and delete it. The token was always the whole credential. What a caller still cannot do is choose a storage path: every token is validated as many hex characters before it names a file.
 
 ## Usage
 
@@ -53,7 +53,7 @@ docker run -p 8080:8080 -v /data/logs:/data/logs ls-server
 
 Point the client at your own server with `--server ws://localhost:8080`, or set `LOG_STREAMER_SERVER`.
 
-The server speaks plain HTTP and has no built-in TLS. Terminate TLS in front of it on any untrusted network, behind a reverse proxy, so tokens never travel in the clear. The Docker image runs as an unprivileged user (uid 10001). Make `/data/logs` writable by that uid when you bind-mount a host directory over it.
+The server speaks plain HTTP and has no built-in TLS. Stop TLS in front of it on any untrusted network, behind a reverse proxy, so tokens never travel in the clear. The Docker image runs as an unprivileged user (uid 10001). Make `/data/logs` writable by that uid when you bind-mount a host directory over it.
 
 ## Watching a CI build live
 
@@ -92,7 +92,7 @@ ls-client streams --key "$KEY" --context owner/repo/12345/1
 
 Each row's token is what `fetch` reads. `--json` prints the same listing for a script. The group spans the whole run, so every job of it lists too, not only the legs of one job.
 
-The group token reaches every stream it names. It derives from the same key, so it is exactly as secret as the tokens it lists.
+The group token reaches every stream it names. It derives from the same key. It is exactly as secret as the tokens it lists.
 
 ### A whole job, every step
 
@@ -121,7 +121,7 @@ Actions writes each step's script to a file and passes the path as `{0}`. `ls-cl
 
 ### A single command
 
-To stream just one step, wrap that command instead:
+To stream one step, wrap that command instead:
 
 ```yaml
 - uses: wow-look-at-my/log-streamer/.github/actions/stream@master
@@ -145,9 +145,9 @@ ls-client fetch --step 3 "$token"    # that step's output only
 ls-client fetch --step "make test" "$token"
 ```
 
-A step is named by its position, by the runner's step id, or by its name. Actions exports no step name to a step. So a step is labelled with the command it opens with.
+Its position names a step, by the runner's step id, or by its name. Actions exports no step name to a step. So a step is labelled with the command it opens with.
 
-Two things give a step a better name. A step's `id:` becomes its `GITHUB_ACTION` value, which is otherwise `__run`, `__run_2`, and so on. `LOG_STREAMER_STEP_NAME` sets the label directly:
+Things give a step a better name. A step's `id:` becomes its `GITHUB_ACTION` value, which is otherwise `__run`, `__run_2`, and so on. `LOG_STREAMER_STEP_NAME` sets the label directly:
 
 ```yaml
 - run: make test
@@ -221,7 +221,7 @@ A single inbound frame is capped at 1 MiB, and the server enforces the byte and 
 
 ## Storage
 
-Each stream is stored as a binary file (`<token>.bin`) in the data directory. It holds a sequence of length-prefixed records, each `[uvarint length][frame]`, where the frame is the wire frame described above. The format stores bytes verbatim, so it is binary safe. Read it back with `fetch`, rather than by hand.
+Each stream is stored as a binary file (`<token>.bin`) in the data directory. It holds a sequence of length-prefixed records, each `[uvarint length][frame]`, where the frame is the wire frame described above. The format stores bytes verbatim. It is binary safe. Read it back with `fetch`, rather than by hand.
 
 ## Building
 

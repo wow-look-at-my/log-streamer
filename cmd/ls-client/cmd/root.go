@@ -92,8 +92,8 @@ func announceToken(tok string) {
 	}
 }
 
-// getStreamToken names the stream to write into. A key is enough on its own:
-// the client derives the same token the watcher does, so nothing has to
+// getStreamToken names the stream to write into. A key is enough on its own.
+// The client derives the same token the watcher does, so nothing has to
 // compute it beforehand and no workflow ever holds the value.
 func getStreamToken() string {
 	if streamToken != "" {
