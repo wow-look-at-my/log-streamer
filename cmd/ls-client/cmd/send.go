@@ -24,8 +24,7 @@ func runSend(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	// A pipe gets the same guarantees a run does: the reader is never held up by
-	// the socket, and a socket that breaks is reconnected and resumed.
+	// A pipe gets the same guarantees a run does.
 	q := newQueue()
 	sender := newDurableSender(q, func() (*websocket.Conn, protocol.ServerHello, error) {
 		conn, err := dialStream(wsURL)

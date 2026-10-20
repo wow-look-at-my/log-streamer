@@ -27,7 +27,7 @@ runs:
     # buildhost resolves the runner's own os and arch, and retries a registry blip.
     - name: Install the log-streamer client
       id: client
-      uses: wow-look-at-my/buildhost/.github/actions/buildhost-download@master
+      uses: wow-look-at-my/buildhost/.github/actions/buildhost-download@lkgb
       with:
         project: log-streamer/ls-client
 

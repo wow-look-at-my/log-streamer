@@ -9,8 +9,7 @@ import (
 	"github.com/wow-look-at-my/log-streamer/internal/protocol"
 )
 
-// redialInterval paces reconnects. It is fixed and it never gives up: a stream
-// that stops retrying loses the rest of the run.
+// redialInterval paces reconnects.
 const redialInterval = time.Second
 
 // durableSender drains a queue onto a connection it owns and replaces that
@@ -20,9 +19,7 @@ type durableSender struct {
 	queue *queue
 	dial  func() (*websocket.Conn, protocol.ServerHello, error)
 
-	// stored is what the server holds, in the record framing its file uses. A
-	// reconnect reads the same number off the new connection, which is how a
-	// frame that landed is told from a frame that did not.
+	// stored is what the server holds, in the record framing its file uses.
 	stored int64
 	done   chan struct{}
 
@@ -79,12 +76,10 @@ func (d *durableSender) run() {
 		if d.conn == nil && !d.connect() {
 			return
 		}
-		// An open but dead socket blocks a write forever, and retirement only reaches a
-		// sender that returns to this loop.
+		// An open but dead socket blocks a write forever, and retirement only reaches a sender that returns to this loop.
 		_ = d.conn.SetWriteDeadline(time.Now().Add(redialInterval))
 		if err := d.conn.WriteMessage(websocket.BinaryMessage, frame); err != nil {
-			// The frame stays at the head, so the reconnect decides whether the server
-			// got it and sends it again if not.
+			// The frame stays at the head, so the reconnect decides whether the server got it and sends it again if not.
 			fmt.Fprintf(os.Stderr, "log-streamer: the stream dropped, reconnecting: %v\n", err)
 			d.drop()
 			continue
@@ -105,15 +100,12 @@ func recordLen(frame []byte) int64 {
 	return n + int64(len(frame))
 }
 
-// connect dials until it succeeds, then reconciles against what the server
-// already holds. A frame this sender wrote that the server does not have stays
-// at the head and goes again; a frame it does have is dropped, so a reconnect never
-// repeats it.
+// connect dials until it succeeds, then reconciles against what the server already
+// holds. A frame this sender wrote that the server does not have stays at the head
+// and goes again. A frame it does have is dropped, so a reconnect never repeats it.
 // It reports false when the stream was retired while it was still dialling.
 func (d *durableSender) connect() bool {
-	// A dial that keeps failing is reported once per distinct error: the retry
-	// loop never gives up, so without this a stream that never connects leaves no
-	// trace of why in the job log.
+	// A dial that keeps failing is reported once per distinct error.
 	var lastErr string
 	for {
 		select {
@@ -138,8 +130,7 @@ func (d *durableSender) connect() bool {
 			fmt.Fprintln(os.Stderr, "log-streamer: connected")
 		}
 		d.conn = conn
-		// A quiet command still has to hold the connection open: the server drops an
-		// idle connection, and every drop costs a reconnect the run did not need.
+		// A quiet command still has to hold the connection open: the server drops an idle connection.
 		d.pingDone = make(chan struct{})
 		startPinger(conn, d.pingDone)
 		if d.token == "" {
