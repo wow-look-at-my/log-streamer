@@ -14,7 +14,7 @@ COPY --from=builder /bin/ls-server /usr/local/bin/
 ENV LOG_STREAMER_DATA_DIR=/data/logs
 ENV LOG_STREAMER_ADDR=:8080
 # Run as an unprivileged user. If you bind-mount a host directory over
-# /data/logs, ensure it is writable by uid 10001.
+# /data/logs, ensure it is writable by a later uid.
 USER streamer
 EXPOSE 8080
 VOLUME /data/logs
