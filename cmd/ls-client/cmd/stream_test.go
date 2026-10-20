@@ -52,7 +52,7 @@ func TestPumpKeepsTeeingAfterTheStreamDies(t *testing.T) {
 }
 
 // The same, with the reader handing over a line per read: the failure lands mid-stream rather
-// than on the opening frame, which is what a reset socket does to a long step.
+// than on the opening frame. This is what a reset socket does to a long step.
 func TestPumpKeepsTeeingWhenTheStreamDiesPartWay(t *testing.T) {
 	lines := []string{"one\n", "two\n", "three\n", "four\n"}
 	var local bytes.Buffer

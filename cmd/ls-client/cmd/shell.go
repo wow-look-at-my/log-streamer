@@ -74,7 +74,7 @@ func firstCommand(path string) string {
 const maxCmdLabel = 60
 
 // shellCommand is the interpreter and the flags Actions itself gives a bash
-// step: fail on an error, and fail on a failure anywhere in a pipeline. A
+// step. Fail on an error, and fail on a failure anywhere in a pipeline. A
 // runner without bash falls back to sh, which is what the runner does.
 func shellCommand() []string {
 	if cmd := os.Getenv("LOG_STREAMER_SHELL"); cmd != "" {

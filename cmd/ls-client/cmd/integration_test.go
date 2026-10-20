@@ -41,8 +41,8 @@ func pointClientAt(t *testing.T, ts *httptest.Server) {
 	t.Cleanup(func() { serverURL = orig })
 }
 
-// captureStdout redirects os.Stdout to a temp file for the duration of a test,
-// so command output does not pollute the test log and writers never block.
+// captureStdout redirects os.Stdout to a temp file for the duration of a test.
+// Command output does not pollute the test log and writers never block.
 func captureStdout(t *testing.T) {
 	t.Helper()
 	orig := os.Stdout
@@ -161,7 +161,7 @@ func TestClientRunViaCLIWithChildFlags(t *testing.T) {
 	require.NoError(t, err)
 }
 
-// An absent server costs the stream and nothing else: a wrapper that fails a step because its
+// An absent server costs the stream and nothing else. A wrapper that fails a step because its
 // logging failed is the defect this client exists to avoid.
 func TestClientRunSurvivesAnAbsentServer(t *testing.T) {
 	lockGlobalState(t)

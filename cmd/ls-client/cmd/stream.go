@@ -28,9 +28,9 @@ type readResult struct {
 // bytes were read, not when they were sent. send must not retain the payload
 // after it returns.
 //
-// send hands the frame to the spool and returns; it does not reach the network,
-// so a stalled socket cannot slow the reader and a dropped socket cannot truncate
-// it. Only a disk failure stops this pump.
+// send hands the frame to the spool and returns. It does not reach the network. A
+// stalled socket cannot slow the reader and a dropped socket cannot truncate it.
+// Only a disk failure stops this pump.
 func pump(r io.Reader, stream protocol.StreamID, local io.Writer, send func(protocol.StreamID, time.Time, []byte) error) error {
 	reads := make(chan readResult)
 	go func() {
@@ -55,8 +55,7 @@ func pump(r io.Reader, stream protocol.StreamID, local io.Writer, send func(prot
 	defer timer.Stop()
 	armed := false
 
-	// The local tee is the copy of record, so a dead socket retires the stream and costs the
-	// reader nothing. Retiring is not repeated, or a long step pays a failed send per chunk.
+	// The local tee is the copy of record, so a dead socket retires the stream and costs the reader nothing.
 	retired := false
 
 	flush := func(upTo int) error {

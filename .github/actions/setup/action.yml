@@ -20,7 +20,7 @@ runs:
     # buildhost resolves the runner's own os and arch, and retries a registry blip.
     - name: Install the log-streamer client
       id: client
-      uses: wow-look-at-my/buildhost/.github/actions/buildhost-download@master
+      uses: wow-look-at-my/buildhost/.github/actions/buildhost-download@lkgb
       with:
         project: log-streamer/ls-client
 
@@ -31,16 +31,15 @@ runs:
         KEY: ${{ inputs.stream-key }}
         STREAM_NAME: ${{ inputs.name }}
         SERVER: ${{ inputs.server }}
-        CLIENT: ${{ steps.client.outputs.path }}
       run: |
         set -euo pipefail
         # Actions execs a job's shell itself, and only Windows execs the client's APE header.
         if [ "${RUNNER_OS}" = "Windows" ]; then
-          dirname "${CLIENT}" >> "${GITHUB_PATH}"
+          dirname "${{ steps.client.outputs.path }}" >> "${GITHUB_PATH}"
         else
           bindir="${RUNNER_TEMP}/log-streamer-bin"
           mkdir -p "${bindir}"
-          printf '#!/bin/sh\nexec /bin/sh %q "$@"\n' "${CLIENT}" > "${bindir}/ls-client"
+          printf '#!/bin/sh\nexec /bin/sh %q "$@"\n' "${{ steps.client.outputs.path }}" > "${bindir}/ls-client"
           chmod +x "${bindir}/ls-client"
           echo "${bindir}" >> "${GITHUB_PATH}"
         fi

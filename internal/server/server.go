@@ -115,9 +115,8 @@ func (s *Server) Handler() http.Handler { return s.mux }
 
 func (s *Server) Run() error {
 	srv := &http.Server{
-		Addr:    s.config.Addr,
-		Handler: s.mux,
-		// No WriteTimeout: it would kill a long-lived WebSocket stream.
+		Addr:              s.config.Addr,
+		Handler:           s.mux,
 		ReadHeaderTimeout: 10 * time.Second,
 		IdleTimeout:       120 * time.Second,
 	}
