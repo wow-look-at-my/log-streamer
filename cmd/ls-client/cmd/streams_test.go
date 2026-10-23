@@ -84,7 +84,7 @@ func TestNoKeyLeavesTheStreamUnnamed(t *testing.T) {
 
 // The stream URL carries what the server needs to index the stream.
 func TestStreamURLCarriesTheGroupAndLabel(t *testing.T) {
-	t.Serial() // this test writes the package-level serverURL
+	t.Serial()
 	lockGlobalState(t)
 	clearDerivationEnv(t)
 	orig := serverURL

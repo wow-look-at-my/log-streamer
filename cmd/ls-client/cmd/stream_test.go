@@ -171,7 +171,7 @@ func TestSanitizeControl(t *testing.T) {
 }
 
 func TestGetURLs(t *testing.T) {
-	t.Serial() // this test writes the package-level serverURL
+	t.Serial()
 	lockGlobalState(t)
 	orig := serverURL
 	defer func() { serverURL = orig }()
@@ -209,7 +209,7 @@ func TestDialStreamRetriesOverTLSOnRedirect(t *testing.T) {
 
 // A WebSocket dial rejects an http scheme, and a bare host outright.
 func TestGetWSURLNormalizesScheme(t *testing.T) {
-	t.Serial() // this test writes the package-level serverURL
+	t.Serial()
 	lockGlobalState(t)
 	orig := serverURL
 	defer func() { serverURL = orig }()

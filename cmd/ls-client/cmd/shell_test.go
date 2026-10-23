@@ -1,5 +1,7 @@
 package cmd
 
+import _ "embed"
+
 import (
 	"bufio"
 	"bytes"
@@ -23,7 +25,7 @@ func writeScript(t *testing.T, body string) string {
 
 func TestFirstCommandSkipsBlanksAndComments(t *testing.T) {
 	require.Equal(t, "make build",
-		firstCommand(writeScript(t, "\n# a comment\n\nmake build\nmake test\n")))
+		firstCommand(writeScript(t, testFirstCommandSkipsBlanksAndCommentsSh)))
 	require.Empty(t, firstCommand(writeScript(t, "# nothing but a comment\n")))
 	require.Empty(t, firstCommand(filepath.Join(t.TempDir(), "absent")))
 }
@@ -161,3 +163,6 @@ func TestRendererRewindsWhenALogRestarts(t *testing.T) {
 	require.Equal(t, 2, strings.Count(buf.String(), "=== step 1:"),
 		"a restarted log numbers its steps from the top again")
 }
+
+//go:embed testdata/test-first-command-skips-blanks-and-comments.sh
+var testFirstCommandSkipsBlanksAndCommentsSh string
