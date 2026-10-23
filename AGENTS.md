@@ -14,7 +14,7 @@ Binaries are output to `build/`.
 
 - `cmd/ls-client/` - CLI client (cobra, self-registering subcommands)
 - `cmd/ls-server/` - Server binary
-- `internal/protocol/` - Shared JSON control types + codec of the binary wire frame (`wire.go`)
+- `internal/protocol/` - Shared JSON control types codec of the frame of the + binary wire (`wire.go`)
 - `internal/token/` - Token generation, validation, and HMAC derivation for CI
 - `.github/actions/stream/` - Composite action running a command through the client
 - `.github/actions/setup/` - Composite action wiring a whole job's steps to one stream
@@ -28,7 +28,7 @@ Binaries are output to `build/`.
 - A stream may register under a group token (`?group=`), which the server indexes as `<group>.grp` and `GET /api/groups/{group}` lists. The group derives from the run alone (`repository/run-id/run-attempt`), namespaced apart from stream tokens. A watcher therefore lists a run's matrix legs without knowing the names they derive from. `--key`, `--context` and `--name` are global flags: any command derives the token or the group it needs.
 - Live CI watching is why `--token`, `token derive` and `fetch --follow` exist. A CI provider withholds the job log, so a server-minted token can never get out of the job. Both sides derive it instead, from a shared key plus the run's identity. See the README's "Watching a CI build live".
 - Log data flows as WebSocket **binary** frames (`[stream:1][ts:8 BE unix-nanos][payload]`). `hello`/`ack`/`error` are JSON text frames. Payloads are raw bytes, chunked, so arbitrarily long lines stream with bounded memory. Lines are reconstructed on fetch by splitting on `\n`.
-- `LOG_STREAMER_MAX_STREAM_BYTES` bounds abuse, `LOG_STREAMER_MAX_TOTAL_BYTES`, `LOG_STREAMER_TTL`, plus a 1 inbound frame cap (MiB). See README for all env vars.
+- `LOG_STREAMER_MAX_STREAM_BYTES` bounds abuse, `LOG_STREAMER_MAX_TOTAL_BYTES`, `LOG_STREAMER_TTL`, plus a 1 cap of the MiB inbound frame. See README for all env vars.
 
 ## Testing
 
